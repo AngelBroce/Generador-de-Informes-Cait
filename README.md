@@ -53,6 +53,12 @@ Ejecutar la aplicación:
 python main.py
 ```
 
+## Descarga de la aplicación
+
+Puedes descargar la aplicación lista para usar en el ZIP del release:
+
+- https://github.com/AngelBroce/Generador-de-Informes-Cait/releases/tag/v1.0.0
+
 ### Flujo de trabajo
 1. **Crear informe**: Selecciona tipo, completa empresa, ubicación y evaluador
 2. **Cargar logo**: Carga la imagen del logo de tu institución
