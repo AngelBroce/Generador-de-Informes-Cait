@@ -1,0 +1,98 @@
+"""Esquemas reutilizables para las secciones de resultados por tipo de prueba."""
+
+RESULT_SCHEMES = {
+    "audiometria": {
+        "title": "RESULTADOS DE LAS PRUEBAS",
+        "chart_label": "AUDIOMETRÍAS",
+        "analysis_label": "las audiometrías",
+        "options": [
+            {
+                "key": "normal",
+                "label": "Normal bilateral",
+                "table_label": "NORMAL BILATERAL",
+                "bg": "#E8F5E9",
+                "fg": "#1B5E20",
+                "chart_color": "#81C784",
+            },
+            {
+                "key": "caida_unilateral",
+                "label": "Caída unilateral",
+                "table_label": "CAÍDA UNILATERAL",
+                "bg": "#FFEBEE",
+                "fg": "#B71C1C",
+                "chart_color": "#FFAB91",
+            },
+            {
+                "key": "caida_bilateral",
+                "label": "Caída bilateral",
+                "table_label": "CAÍDA BILATERAL",
+                "bg": "#FFF3E0",
+                "fg": "#BF360C",
+                "chart_color": "#F8BBD0",
+            },
+        ],
+    },
+    "espirometria": {
+        "title": "RESULTADOS DE LAS PRUEBAS",
+        "chart_label": "ESPIROMETRÍAS",
+        "analysis_label": "las espirometrías",
+        "options": [
+            {
+                "key": "espiro_normal",
+                "label": "Espirometría normal",
+                "table_label": "ESPIROMETRÍA NORMAL",
+                "bg": "#E3F2FD",
+                "fg": "#0D47A1",
+                "chart_color": "#64B5F6",
+            },
+            {
+                "key": "restriccion_leve",
+                "label": "Restricción leve",
+                "table_label": "RESTRICCIÓN LEVE",
+                "bg": "#FFF8E1",
+                "fg": "#E65100",
+                "chart_color": "#FFCC80",
+            },
+            {
+                "key": "obstruccion_leve",
+                "label": "Obstrucción leve",
+                "table_label": "OBSTRUCCIÓN LEVE",
+                "bg": "#E8F5E9",
+                "fg": "#1B5E20",
+                "chart_color": "#AED581",
+            },
+            {
+                "key": "obstruccion_restriccion_leve",
+                "label": "Obstrucción a restricción leve",
+                "table_label": "OBSTRUCCIÓN A RESTRICCIÓN LEVE",
+                "bg": "#EDE7F6",
+                "fg": "#4A148C",
+                "chart_color": "#B39DDB",
+            },
+            {
+                "key": "restriccion_moderada",
+                "label": "Restricción moderada",
+                "table_label": "RESTRICCIÓN MODERADA",
+                "bg": "#FFFDE7",
+                "fg": "#F9A825",
+                "chart_color": "#FFF59D",
+            },
+            {
+                "key": "obstruccion_moderada",
+                "label": "Obstrucción moderada",
+                "table_label": "OBSTRUCCIÓN MODERADA",
+                "bg": "#E0F7FA",
+                "fg": "#006064",
+                "chart_color": "#80DEEA",
+            },
+            {
+                "key": "restriccion_grave",
+                "label": "Restricción grave",
+                "table_label": "RESTRICCIÓN GRAVE",
+                "bg": "#FCE4EC",
+                "fg": "#880E4F",
+                "chart_color": "#F48FB1",
+            },
+        ],
+    },
+}
