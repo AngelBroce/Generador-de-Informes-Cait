@@ -27,7 +27,8 @@ logs/
 
 # Distribution
 build/
-dist/
+dist/*
+!dist/CAIT_Informes.zip
 *.egg-info/
 
 # Test coverage
