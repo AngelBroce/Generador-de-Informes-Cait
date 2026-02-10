@@ -198,9 +198,14 @@ class MainApplication:
         content_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
         # Sección de acciones rápidas
-        actions_label = ttk.Label(content_frame, text="Acciones Principales", 
-                                 style='Title.TLabel')
-        actions_label.pack(pady=(0, 15))
+        actions_header = ttk.Frame(content_frame)
+        actions_header.pack(fill=tk.X, pady=(0, 15))
+
+        ttk.Label(
+            actions_header,
+            text="Acciones Principales",
+            style='Title.TLabel',
+        ).pack(side=tk.LEFT)
         
         # Botones principales
         buttons_frame = ttk.Frame(content_frame)
@@ -209,10 +214,38 @@ class MainApplication:
         right_buttons = ttk.Frame(buttons_frame)
         right_buttons.pack(anchor=tk.E, fill=tk.X)
 
-        ttk.Button(right_buttons, text="📦 Exportar ZIP",
-                   command=self.export_zip, style='Primary.TButton').pack(side=tk.RIGHT, padx=5)
-        ttk.Button(right_buttons, text="📄 Crear Informe y Generar PDF",
-                   command=self.create_and_generate_pdf, style='Primary.TButton').pack(side=tk.RIGHT, padx=5)
+        help_icon = tk.Label(
+            right_buttons,
+            text="?",
+            font=("Arial", 10, "bold"),
+            fg=verde_oscuro,
+            bg="#E8F5E9",
+            relief=tk.RIDGE,
+            width=2,
+            padx=2,
+            pady=1,
+        )
+        help_icon.pack(side=tk.LEFT, padx=(0, 8))
+        self._attach_tooltip(
+            help_icon,
+            "Crear informe genera solo el PDF. Exportar ZIP guarda el PDF y todos los adjuntos, "
+            "ordenados en carpetas.",
+        )
+
+        ttk.Button(
+            right_buttons,
+            text="📄 Crear informe (solo PDF)",
+            command=self.create_and_generate_pdf,
+            style='Primary.TButton',
+        ).pack(side=tk.LEFT, padx=5)
+        ttk.Button(
+            right_buttons,
+            text="📦 Exportar paquete ZIP (PDF + adjuntos)",
+            command=self.export_zip,
+            style='Primary.TButton',
+        ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Label(content_frame, text="", style='Subtitle.TLabel').pack(pady=(0, 2))
 
         # Separador
         ttk.Separator(content_frame, orient='horizontal').pack(fill=tk.X, pady=10)
@@ -230,23 +263,15 @@ class MainApplication:
         sections_container.grid_columnconfigure(0, weight=1)
 
         self.company_section_name = "Datos de la Empresa"
-        dynamic_sections = []
-        for i in range(4, 10):
-            if i == 4:
-                dynamic_sections.append(self.results_section_name)
-            elif i == 5:
-                dynamic_sections.append(self.conclusion_section_name)
-            elif i == 6:
-                dynamic_sections.append(self.recommendations_section_name)
-            elif i == 7:
-                dynamic_sections.append(self.calibration_section_name)
-            elif i == 8:
-                dynamic_sections.append(self.report_attachments_section_name)
-            elif i == 9:
-                dynamic_sections.append(self.attendance_section_name)
-            else:
-                dynamic_sections.append(f"Parte {i}")
-        additional_sections = [self.company_section_name] + dynamic_sections
+        additional_sections = [
+            self.company_section_name,
+            self.results_section_name,
+            self.conclusion_section_name,
+            self.recommendations_section_name,
+            self.calibration_section_name,
+            self.report_attachments_section_name,
+            self.attendance_section_name,
+        ]
         self.section_names = ["Presentación del informe", "Contenido del informe"] + additional_sections
         self.section_buttons = {}
         self.section_frames = {}
@@ -2617,6 +2642,41 @@ class MainApplication:
                 
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir la carpeta: {e}")
+
+    def _attach_tooltip(self, widget: tk.Widget, text: str) -> None:
+        """Asocia un tooltip sencillo a un widget."""
+
+        tooltip = {"window": None}
+
+        def _show(_event):
+            if tooltip["window"] is not None:
+                return
+            win = tk.Toplevel(self.root)
+            win.wm_overrideredirect(True)
+            win.attributes("-topmost", True)
+            label = tk.Label(
+                win,
+                text=text,
+                background="#FFFFE0",
+                foreground="#000000",
+                relief=tk.SOLID,
+                borderwidth=1,
+                font=("Arial", 9),
+            )
+            label.pack(ipadx=6, ipady=4)
+            x = widget.winfo_rootx() + 20
+            y = widget.winfo_rooty() + widget.winfo_height() + 8
+            win.wm_geometry(f"+{x}+{y}")
+            tooltip["window"] = win
+
+        def _hide(_event):
+            win = tooltip["window"]
+            if win is not None:
+                win.destroy()
+                tooltip["window"] = None
+
+        widget.bind("<Enter>", _show)
+        widget.bind("<Leave>", _hide)
     
     def run(self):
         """Inicia la aplicación"""

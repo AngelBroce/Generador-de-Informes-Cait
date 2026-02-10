@@ -5,6 +5,7 @@ Servicio de generación de PDFs para informes con formato profesional.
 from typing import Dict, Optional
 from datetime import datetime
 from pathlib import Path
+import sys
 import os
 import tempfile
 import shutil
@@ -1436,7 +1437,7 @@ class PDFGenerator:
     def _resolve_protocol_image_paths(self) -> list:
         """Devuelve las imagenes del protocolo en el orden esperado."""
 
-        base_dir = Path(__file__).resolve().parents[2] / "imagenes de protocolo"
+        base_dir = self._get_resource_base() / "imagenes de protocolo"
         ordered_names = [
             "Imagen1.jpg",
             "Imagen2.jpg",
@@ -1454,7 +1455,7 @@ class PDFGenerator:
     def _resolve_spirometry_protocol_image_paths(self) -> list:
         """Devuelve las imagenes del protocolo de espirometria en orden."""
 
-        base_dir = Path(__file__).resolve().parents[2] / "imagenes de protocolo"
+        base_dir = self._get_resource_base() / "imagenes de protocolo"
         ordered_names = [
             "espirometria 1.jpg",
             "espirometria 2.jpg",
@@ -1575,6 +1576,14 @@ class PDFGenerator:
 
         y = self._draw_header_branding(pdf_canvas, report_data)
         return y - 0.35 * inch
+
+    def _get_resource_base(self) -> Path:
+        """Obtiene la raiz de recursos tanto en modo normal como en ejecutable."""
+
+        base_path = getattr(sys, "_MEIPASS", None)
+        if base_path:
+            return Path(base_path)
+        return Path(__file__).resolve().parents[2]
 
     def _draw_technical_team_page(
         self,
