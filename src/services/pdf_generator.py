@@ -374,26 +374,62 @@ class PDFGenerator:
         y -= 0.45 * inch
         pdf_canvas.drawCentredString(self.page_width / 2, y, "PREPARADO POR:")
 
-        evaluator_profile = self._resolve_evaluator_profile(report_data)
-        evaluator_name = (evaluator_profile.get("name") or report_data.get("evaluator") or "N/A").upper()
-        header_label = (evaluator_profile.get("header_label") or evaluator_profile.get("title_label") or "LICENCIADA").upper()
-
-        y -= 0.3 * inch
-        pdf_canvas.setFont("Helvetica", 9)
-        pdf_canvas.setFillColor(colors.black)
-        pdf_canvas.drawCentredString(
-            self.page_width / 2,
-            y,
-            f"{header_label}: {evaluator_name}",
+        technical_team = self._resolve_technical_team(report_data)
+        is_combined_report = (
+            "audiometr" in (report_data.get("type", "").lower())
+            and "espiro" in (report_data.get("type", "").lower())
         )
 
-        profession_line = evaluator_profile.get("profession") or "TERAPEUTA RESPIRATORIA"
-        y -= 0.25 * inch
-        pdf_canvas.drawCentredString(self.page_width / 2, y, profession_line)
+        if is_combined_report and len(technical_team) >= 2:
+            left_member = technical_team[0]
+            right_member = technical_team[1]
 
-        registry_line = evaluator_profile.get("registry") or "REGISTRO IDÓNEO 124"
-        y -= 0.2 * inch
-        pdf_canvas.drawCentredString(self.page_width / 2, y, registry_line)
+            def _draw_member_block(member: Dict, center_x: float, top_y: float) -> None:
+                name = (member.get("name") or "N/A").upper()
+                details = [
+                    str(detail).upper()
+                    for detail in (member.get("details") or [])
+                    if str(detail).strip()
+                ]
+
+                line_y = top_y
+                pdf_canvas.setFont("Helvetica-Bold", 11)
+                pdf_canvas.setFillColor(colors.HexColor("#007A3D"))
+                pdf_canvas.drawCentredString(center_x, line_y, name)
+
+                pdf_canvas.setFont("Helvetica-Bold", 10)
+                for detail in details[:2]:
+                    line_y -= 0.24 * inch
+                    pdf_canvas.drawCentredString(center_x, line_y, detail)
+
+            y -= 0.3 * inch
+            left_x = self.page_width * 0.23
+            right_x = self.page_width * 0.77
+            _draw_member_block(left_member, left_x, y)
+            _draw_member_block(right_member, right_x, y)
+
+            y -= 0.72 * inch
+        else:
+            evaluator_profile = self._resolve_evaluator_profile(report_data)
+            evaluator_name = (evaluator_profile.get("name") or report_data.get("evaluator") or "N/A").upper()
+            header_label = (evaluator_profile.get("header_label") or evaluator_profile.get("title_label") or "LICENCIADA").upper()
+
+            y -= 0.3 * inch
+            pdf_canvas.setFont("Helvetica", 9)
+            pdf_canvas.setFillColor(colors.black)
+            pdf_canvas.drawCentredString(
+                self.page_width / 2,
+                y,
+                f"{header_label}: {evaluator_name}",
+            )
+
+            profession_line = evaluator_profile.get("profession") or "TERAPEUTA RESPIRATORIA"
+            y -= 0.25 * inch
+            pdf_canvas.drawCentredString(self.page_width / 2, y, profession_line)
+
+            registry_line = evaluator_profile.get("registry") or "REGISTRO IDÓNEO 124"
+            y -= 0.2 * inch
+            pdf_canvas.drawCentredString(self.page_width / 2, y, registry_line)
 
         counterpart_name = (report_data.get("company_counterpart") or "").strip()
         counterpart_role = (report_data.get("counterpart_role") or "").strip()
@@ -1094,10 +1130,6 @@ class PDFGenerator:
         for line in self._wrap_text(analysis_text, "Helvetica", 10, text_width, pdf_canvas):
             pdf_canvas.drawString(self.left_margin, analysis_y, line)
             analysis_y -= 0.2 * inch
-
-        analysis_y -= 0.2 * inch
-        pdf_canvas.setFont("Helvetica-Oblique", 9)
-        pdf_canvas.drawCentredString(self.page_width / 2, analysis_y, '"EL PILAR DE TUS SENTIDOS".')
 
         self._draw_footer(pdf_canvas, page_number=page_number)
         return page_number
@@ -2449,17 +2481,29 @@ class PDFGenerator:
             return tuple(int(hex_color[i : i + 2], 16) / 255.0 for i in (0, 2, 4))
 
 
-        fallback_color = hex_to_rgb_fraction("#607D8B")
+        vivid_palette_hex = [
+            "#0072CE",  # azul vivo
+            "#FF6F00",  # naranja vivo
+            "#00A86B",  # verde esmeralda
+            "#D81B60",  # magenta
+            "#6A1B9A",  # violeta
+            "#E53935",  # rojo vivo
+            "#00897B",  # turquesa
+            "#F9A825",  # amarillo ámbar
+        ]
+        fallback_color = hex_to_rgb_fraction(vivid_palette_hex[0])
 
         data_values = []
         data_labels = []
         palette = []
+        color_idx = 0
         for label, value, _key, option in segments:
             if value > 0:
                 data_values.append(value)
                 data_labels.append(str(label).upper())
-                color = option.get("bg") if isinstance(option, dict) else None
-                palette.append(hex_to_rgb_fraction(color) if color else fallback_color)
+            palette_hex = vivid_palette_hex[color_idx % len(vivid_palette_hex)]
+            palette.append(hex_to_rgb_fraction(palette_hex))
+            color_idx += 1
 
 
         if not data_values:
@@ -2475,7 +2519,7 @@ class PDFGenerator:
 
             return tuple(min(1, max(0, c * factor)) for c in color)
 
-        base_colors = [adjust_color(col, 0.6) for col in palette]
+        base_colors = [adjust_color(col, 0.8) for col in palette]
 
         ax.pie(
 
@@ -2499,12 +2543,12 @@ class PDFGenerator:
             pctdistance=0.74,
 
             textprops={"fontsize": 8, "color": "#212121"},
-            wedgeprops={"linewidth": 1.2, "edgecolor": "#f5f5f5"},
+            wedgeprops={"linewidth": 1.4, "edgecolor": "#FFFFFF"},
         )
 
         for wedge in wedges:
-            wedge.set_linewidth(1.2)
-            wedge.set_edgecolor("#4e342e")
+            wedge.set_linewidth(1.4)
+            wedge.set_edgecolor("#FFFFFF")
         for autotext in autotexts:
             autotext.set_fontweight("bold")
 

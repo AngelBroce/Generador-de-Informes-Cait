@@ -115,6 +115,15 @@ class MainApplication:
         self.evaluator_var = tk.StringVar()
         self.evaluator_combo = None
         self.evaluator_detail_label = None
+        self.selected_audio_evaluator_id = tk.StringVar()
+        self.selected_spiro_evaluator_id = tk.StringVar()
+        self.audio_evaluator_var = tk.StringVar()
+        self.spiro_evaluator_var = tk.StringVar()
+        self.audio_evaluator_combo = None
+        self.spiro_evaluator_combo = None
+        self.combined_evaluators_container = None
+        self.combined_audio_lookup = {}
+        self.combined_spiro_lookup = {}
 
         # Catálogo de contrapartes técnicas
         self.counterparts_repo = CounterpartRepository()
@@ -950,7 +959,45 @@ class MainApplication:
         )
         self.evaluator_detail_label.grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=12, pady=(0, 6))
 
-        self._create_pill_label(form, "Contraparte tecnica").grid(row=5, column=0, sticky=tk.W, pady=8)
+        self.combined_evaluators_container = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
+        self.combined_evaluators_container.grid(row=5, column=1, columnspan=2, sticky="nsew", padx=12, pady=(0, 8))
+
+        combined_audio_label = ctk.CTkLabel(
+            self.combined_evaluators_container,
+            text="Evaluador de audiometría *",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            text_color=self.colors["text"],
+            anchor="w",
+        )
+        combined_audio_label.pack(anchor=tk.W, pady=(0, 4))
+        self.audio_evaluator_combo = self._create_combo(
+            self.combined_evaluators_container,
+            self.audio_evaluator_var,
+            [],
+            command=lambda _value=None: self._handle_combined_audio_selection(),
+            width=280,
+        )
+        self.audio_evaluator_combo.pack(fill=tk.X, pady=(0, 8))
+
+        combined_spiro_label = ctk.CTkLabel(
+            self.combined_evaluators_container,
+            text="Evaluador de espirometría *",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            text_color=self.colors["text"],
+            anchor="w",
+        )
+        combined_spiro_label.pack(anchor=tk.W, pady=(0, 4))
+        self.spiro_evaluator_combo = self._create_combo(
+            self.combined_evaluators_container,
+            self.spiro_evaluator_var,
+            [],
+            command=lambda _value=None: self._handle_combined_spiro_selection(),
+            width=280,
+        )
+        self.spiro_evaluator_combo.pack(fill=tk.X)
+        self.combined_evaluators_container.grid_remove()
+
+        self._create_pill_label(form, "Contraparte tecnica").grid(row=6, column=0, sticky=tk.W, pady=8)
         self.counterpart_combo = self._create_combo(
             form,
             self.counterpart_var,
@@ -958,10 +1005,10 @@ class MainApplication:
             command=lambda _value=None: self._handle_counterpart_selection(),
             width=280,
         )
-        self.counterpart_combo.grid(row=5, column=1, sticky="nsew", padx=12, pady=8)
+        self.counterpart_combo.grid(row=6, column=1, sticky="nsew", padx=12, pady=8)
 
         counterpart_actions = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
-        counterpart_actions.grid(row=5, column=2, sticky=tk.W, padx=6, pady=8)
+        counterpart_actions.grid(row=6, column=2, sticky=tk.W, padx=6, pady=8)
         ctk.CTkButton(
             counterpart_actions,
             text="Agregar",
@@ -987,13 +1034,13 @@ class MainApplication:
             command=self._remove_selected_counterpart,
         ).pack(side=tk.LEFT)
 
-        self._create_pill_label(form, "Cargo contraparte").grid(row=6, column=0, sticky=tk.W, pady=8)
+        self._create_pill_label(form, "Cargo contraparte").grid(row=7, column=0, sticky=tk.W, pady=8)
         self.counterpart_role_entry = self._create_text_entry(form, self.counterpart_role_var, width=280)
-        self.counterpart_role_entry.grid(row=6, column=1, sticky="nsew", padx=12, pady=8)
+        self.counterpart_role_entry.grid(row=7, column=1, sticky="nsew", padx=12, pady=8)
 
-        self._create_pill_label(form, "Fecha de evaluación *").grid(row=7, column=0, sticky=tk.W, pady=8)
+        self._create_pill_label(form, "Fecha de evaluación *").grid(row=8, column=0, sticky=tk.W, pady=8)
         date_container = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
-        date_container.grid(row=7, column=1, sticky="nsew", padx=12, pady=8)
+        date_container.grid(row=8, column=1, sticky="nsew", padx=12, pady=8)
         date_wrapper = ctk.CTkFrame(
             date_container,
             fg_color=self.colors["field_bg"],
@@ -1049,6 +1096,79 @@ class MainApplication:
             target_id = profiles[0].get("id")
         if target_id:
             self._select_evaluator(target_id, update_combo=True)
+
+        self._reload_combined_evaluator_combos()
+
+    def _reload_combined_evaluator_combos(self) -> None:
+        """Actualiza los combos de evaluadores por especialidad para reportes combinados."""
+
+        profiles = self.evaluators_repo.list_all()
+
+        audio_profiles = [
+            profile for profile in profiles if "audiometria" in (profile.get("applicable_reports") or [])
+        ]
+        spiro_profiles = [
+            profile for profile in profiles if "espirometria" in (profile.get("applicable_reports") or [])
+        ]
+
+        self.combined_audio_lookup = {
+            profile.get("name", ""): profile.get("id", "")
+            for profile in audio_profiles
+            if profile.get("id") and profile.get("name")
+        }
+        self.combined_spiro_lookup = {
+            profile.get("name", ""): profile.get("id", "")
+            for profile in spiro_profiles
+            if profile.get("id") and profile.get("name")
+        }
+
+        if self.audio_evaluator_combo is not None:
+            self.audio_evaluator_combo.configure(values=list(self.combined_audio_lookup.keys()))
+        if self.spiro_evaluator_combo is not None:
+            self.spiro_evaluator_combo.configure(values=list(self.combined_spiro_lookup.keys()))
+
+        self._sync_combined_evaluator_selection_defaults()
+
+    def _sync_combined_evaluator_selection_defaults(self) -> None:
+        """Mantiene una selección válida por especialidad cuando corresponde."""
+
+        current_audio_id = self.selected_audio_evaluator_id.get()
+        current_spiro_id = self.selected_spiro_evaluator_id.get()
+
+        if current_audio_id not in self.evaluator_profiles:
+            default_audio = self.evaluators_repo.get_primary_for_report("audiometria")
+            current_audio_id = default_audio.get("id") if default_audio else ""
+        if current_spiro_id not in self.evaluator_profiles:
+            default_spiro = self.evaluators_repo.get_primary_for_report("espirometria")
+            current_spiro_id = default_spiro.get("id") if default_spiro else ""
+
+        self.selected_audio_evaluator_id.set(current_audio_id or "")
+        self.selected_spiro_evaluator_id.set(current_spiro_id or "")
+
+        audio_name = self.evaluator_profiles.get(current_audio_id, {}).get("name", "") if current_audio_id else ""
+        spiro_name = self.evaluator_profiles.get(current_spiro_id, {}).get("name", "") if current_spiro_id else ""
+
+        self.audio_evaluator_var.set(audio_name)
+        self.spiro_evaluator_var.set(spiro_name)
+
+        if self.audio_evaluator_combo is not None and audio_name:
+            self.audio_evaluator_combo.set(audio_name)
+        if self.spiro_evaluator_combo is not None and spiro_name:
+            self.spiro_evaluator_combo.set(spiro_name)
+
+    def _handle_combined_audio_selection(self) -> None:
+        """Sincroniza la selección del evaluador de audiometría."""
+
+        selected_name = (self.audio_evaluator_var.get() or "").strip()
+        evaluator_id = self.combined_audio_lookup.get(selected_name, "")
+        self.selected_audio_evaluator_id.set(evaluator_id)
+
+    def _handle_combined_spiro_selection(self) -> None:
+        """Sincroniza la selección del evaluador de espirometría."""
+
+        selected_name = (self.spiro_evaluator_var.get() or "").strip()
+        evaluator_id = self.combined_spiro_lookup.get(selected_name, "")
+        self.selected_spiro_evaluator_id.set(evaluator_id)
 
     def _reload_counterparts(self, prefer_id: str | None = None) -> None:
         """Carga o actualiza el listado de contrapartes desde el repositorio."""
@@ -1427,8 +1547,32 @@ class MainApplication:
                 return profile
         return None
 
+    def _is_combined_report_type(self, report_type: str) -> bool:
+        """Indica si el tipo de informe incluye audiometría y espirometría."""
+
+        normalized = (report_type or "").lower()
+        return "audiometr" in normalized and "espirom" in normalized
+
     def _build_technical_team_payload(self, report_type: str) -> list:
         """Arma la lista enviada al generador de PDF para Equipo Técnico."""
+
+        if self._is_combined_report_type(report_type):
+            selected_profiles = []
+            for evaluator_id in (
+                self.selected_audio_evaluator_id.get(),
+                self.selected_spiro_evaluator_id.get(),
+            ):
+                profile = self.evaluator_profiles.get(evaluator_id)
+                if profile and profile.get("id") not in {item.get("id") for item in selected_profiles}:
+                    selected_profiles.append(profile)
+
+            formatted_combined = [
+                self._format_technical_member(profile)
+                for profile in selected_profiles
+                if profile
+            ]
+            if formatted_combined:
+                return formatted_combined
 
         team_profiles = self.evaluators_repo.get_team_for_report(report_type)
         formatted = [self._format_technical_member(profile) for profile in team_profiles if profile]
@@ -1573,6 +1717,26 @@ class MainApplication:
         self._refresh_content_preview()
         self._render_result_blocks()
         self._update_test_attachment_state()
+        self._toggle_combined_evaluator_fields()
+
+    def _toggle_combined_evaluator_fields(self) -> None:
+        """Muestra selectores de dos evaluadores cuando el informe es combinado."""
+
+        report_type = (self.report_type_var.get() or "").lower()
+        is_combined = "audiometr" in report_type and "espirom" in report_type
+
+        if self.combined_evaluators_container is None:
+            return
+
+        if is_combined:
+            self.combined_evaluators_container.grid()
+            if self.evaluator_combo is not None:
+                self.evaluator_combo.configure(state="disabled")
+            self._reload_combined_evaluator_combos()
+        else:
+            self.combined_evaluators_container.grid_remove()
+            if self.evaluator_combo is not None:
+                self.evaluator_combo.configure(state="readonly")
 
     def _build_content_section(self):
         """Construye la sección de vista previa del índice de contenido."""
@@ -3308,13 +3472,33 @@ class MainApplication:
         self._normalize_date_var(self.date_var)
         self._normalize_date_var(self.study_dates_var)
         study_dates = self.study_dates_var.get()
+
+        is_combined_report = self._is_combined_report_type(report_type)
         
-        if not all([company, location, evaluator]):
+        if not all([company, location]) or (not is_combined_report and not evaluator):
             messagebox.showwarning(
                 "Campos incompletos",
                 "Por favor completa: Empresa, Ubicación y Evaluador",
             )
             return False
+
+        if is_combined_report:
+            audio_id = self.selected_audio_evaluator_id.get()
+            spiro_id = self.selected_spiro_evaluator_id.get()
+
+            if not audio_id or not spiro_id:
+                messagebox.showwarning(
+                    "Evaluadores incompletos",
+                    "Para informe combinado debes seleccionar evaluador de audiometría y de espirometría.",
+                )
+                return False
+
+            if audio_id == spiro_id:
+                messagebox.showwarning(
+                    "Selección inválida",
+                    "Selecciona dos evaluadores diferentes para que aparezcan ambos en PREPARADO POR.",
+                )
+                return False
 
         if evaluator and not evaluator_profile:
             messagebox.showwarning(
@@ -3670,6 +3854,10 @@ class MainApplication:
             "study_dates": self.study_dates_var.get(),
             "selected_evaluator_id": self.selected_evaluator_id.get(),
             "evaluator_name": self.evaluator_var.get(),
+            "selected_audio_evaluator_id": self.selected_audio_evaluator_id.get(),
+            "selected_spiro_evaluator_id": self.selected_spiro_evaluator_id.get(),
+            "audio_evaluator_name": self.audio_evaluator_var.get(),
+            "spiro_evaluator_name": self.spiro_evaluator_var.get(),
             "selected_counterpart_id": self.selected_counterpart_id.get(),
             "counterpart_label": self.counterpart_var.get(),
             "evaluated_entries": self.evaluated_entries,
@@ -3712,6 +3900,14 @@ class MainApplication:
             selected_name = (state.get("evaluator_name") or "").strip()
             self.evaluator_var.set(selected_name)
             self._handle_evaluator_selection()
+
+        self.selected_audio_evaluator_id.set((state.get("selected_audio_evaluator_id") or "").strip())
+        self.selected_spiro_evaluator_id.set((state.get("selected_spiro_evaluator_id") or "").strip())
+        if state.get("audio_evaluator_name"):
+            self.audio_evaluator_var.set((state.get("audio_evaluator_name") or "").strip())
+        if state.get("spiro_evaluator_name"):
+            self.spiro_evaluator_var.set((state.get("spiro_evaluator_name") or "").strip())
+        self._reload_combined_evaluator_combos()
 
         counterpart_id = state.get("selected_counterpart_id")
         if counterpart_id and counterpart_id in self.counterpart_profiles:
@@ -3953,6 +4149,15 @@ class MainApplication:
         if self.evaluator_combo is not None:
             self.evaluator_combo.set("")
         self._update_evaluator_details_preview()
+
+        self.selected_audio_evaluator_id.set("")
+        self.selected_spiro_evaluator_id.set("")
+        self.audio_evaluator_var.set("")
+        self.spiro_evaluator_var.set("")
+        if self.audio_evaluator_combo is not None:
+            self.audio_evaluator_combo.set("")
+        if self.spiro_evaluator_combo is not None:
+            self.spiro_evaluator_combo.set("")
 
         self.selected_counterpart_id.set("")
         self.counterpart_var.set("Sin contraparte")
