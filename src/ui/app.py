@@ -754,7 +754,6 @@ class MainApplication:
         self.company_section_name = "Datos de la Empresa"
         self.drafts_section_name = "Borradores"
         additional_sections = [
-            self.drafts_section_name,
             self.company_section_name,
             self.results_section_name,
             self.conclusion_section_name,
@@ -770,6 +769,7 @@ class MainApplication:
         self.sections_container = sections_container
         self.content_outline_labels = []
         self.drafts_tree = None
+        self.drafts_window = None
 
         # Variables del formulario principal
         self.report_type_var = tk.StringVar(value="audiometría")
@@ -988,10 +988,8 @@ class MainApplication:
         ).pack(side=tk.LEFT)
 
         self._create_pill_label(form, "Cargo contraparte").grid(row=6, column=0, sticky=tk.W, pady=8)
-        counterpart_role_container, self.counterpart_role_entry, _counterpart_role_error = (
-            self._create_validated_entry(form, self.counterpart_role_var, width=280)
-        )
-        counterpart_role_container.grid(row=6, column=1, sticky="nsew", padx=12, pady=8)
+        self.counterpart_role_entry = self._create_text_entry(form, self.counterpart_role_var, width=280)
+        self.counterpart_role_entry.grid(row=6, column=1, sticky="nsew", padx=12, pady=8)
 
         self._create_pill_label(form, "Fecha de evaluación *").grid(row=7, column=0, sticky=tk.W, pady=8)
         date_container = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
@@ -1624,9 +1622,6 @@ class MainApplication:
 
             if name == self.company_section_name:
                 self._build_company_data_section(frame)
-                continue
-            if name == self.drafts_section_name:
-                self._build_drafts_section(frame)
                 continue
             if name == self.results_section_name:
                 self._build_results_section(frame)
@@ -3779,8 +3774,39 @@ class MainApplication:
             )
             return
 
-        self.show_section(self.drafts_section_name)
-        self._refresh_drafts_table()
+        self._open_drafts_window()
+
+    def _open_drafts_window(self) -> None:
+        """Abre una ventana para administrar y cargar borradores internos."""
+
+        if self.drafts_window is not None and self.drafts_window.winfo_exists():
+            self.drafts_window.deiconify()
+            self.drafts_window.lift()
+            self.drafts_window.focus_force()
+            self._refresh_drafts_table()
+            return
+
+        window = tk.Toplevel(self.root)
+        window.title("Borradores")
+        window.geometry("760x480")
+        window.minsize(680, 420)
+        window.transient(self.root)
+        window.configure(bg=self.colors["bg"])
+
+        self.drafts_window = window
+
+        container = ctk.CTkFrame(window, fg_color=self.colors["bg"], corner_radius=0)
+        container.pack(fill=tk.BOTH, expand=True, padx=14, pady=14)
+        self._build_drafts_section(container)
+
+        self._center_window(window)
+
+        def _on_close() -> None:
+            self.drafts_tree = None
+            self.drafts_window = None
+            window.destroy()
+
+        window.protocol("WM_DELETE_WINDOW", _on_close)
 
         if self.drafts_tree is not None:
             first = self.drafts_tree.get_children()
