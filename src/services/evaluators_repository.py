@@ -191,6 +191,20 @@ class EvaluatorRepository:
             self.save_all(entries)
         return updated_entry
 
+    def remove_evaluator(self, evaluator_id: str) -> bool:
+        """Elimina un evaluador del catálogo."""
+
+        if not evaluator_id:
+            return False
+
+        entries = self.load_all()
+        remaining = [entry for entry in entries if entry.get("id") != evaluator_id]
+        if len(remaining) == len(entries):
+            return False
+
+        self.save_all(remaining)
+        return True
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

@@ -395,18 +395,22 @@ class PDFGenerator:
         y -= 0.2 * inch
         pdf_canvas.drawCentredString(self.page_width / 2, y, registry_line)
 
-        y -= 0.45 * inch
-        pdf_canvas.setFont("Helvetica-Bold", 10)
-        pdf_canvas.setFillColor(colors.HexColor("#2E7D32"))
-        pdf_canvas.drawCentredString(self.page_width / 2, y, "CONTRAPARTE TÉCNICA:")
+        counterpart_name = (report_data.get("company_counterpart") or "").strip()
+        counterpart_role = (report_data.get("counterpart_role") or "").strip()
+        if counterpart_name:
+            y -= 0.45 * inch
+            pdf_canvas.setFont("Helvetica-Bold", 10)
+            pdf_canvas.setFillColor(colors.HexColor("#2E7D32"))
+            pdf_canvas.drawCentredString(self.page_width / 2, y, "CONTRAPARTE TÉCNICA:")
 
-        y -= 0.3 * inch
-        pdf_canvas.setFont("Helvetica", 9)
-        pdf_canvas.setFillColor(colors.black)
-        pdf_canvas.drawCentredString(self.page_width / 2, y, "LICDO. DIEGO CALDERÓN")
+            y -= 0.3 * inch
+            pdf_canvas.setFont("Helvetica", 9)
+            pdf_canvas.setFillColor(colors.black)
+            pdf_canvas.drawCentredString(self.page_width / 2, y, counterpart_name.upper())
 
-        y -= 0.25 * inch
-        pdf_canvas.drawCentredString(self.page_width / 2, y, "ENFERMERO")
+            if counterpart_role:
+                y -= 0.25 * inch
+                pdf_canvas.drawCentredString(self.page_width / 2, y, counterpart_role.upper())
 
         y -= 0.45 * inch
         pdf_canvas.setFont("Helvetica-Bold", 10)
@@ -577,6 +581,9 @@ class PDFGenerator:
         pdf_canvas.line(self.left_margin, y, self.page_width - self.right_margin, y)
         y -= 0.35 * inch
 
+        counterpart_name = (report_data.get("company_counterpart") or "").strip()
+        counterpart_role = (report_data.get("counterpart_role") or "").strip()
+
         rows = [
             ("Nombre de la empresa:", report_data.get("company", "N/A")),
             (
@@ -584,11 +591,6 @@ class PDFGenerator:
                 report_data.get("plant") or report_data.get("location", "N/A"),
             ),
             ("Actividad principal:", report_data.get("activity", "N/A")),
-            (
-                "Contraparte técnica por la empresa:",
-                report_data.get("company_counterpart", "N/A"),
-            ),
-            ("Cargo del personal encargado:", report_data.get("counterpart_role", "N/A")),
             (
                 "País en que se realizó:",
                 report_data.get("country") or report_data.get("location", "N/A"),
@@ -598,6 +600,14 @@ class PDFGenerator:
                 report_data.get("study_dates", report_data.get("date", "N/A")),
             ),
         ]
+
+        if counterpart_name:
+            rows.insert(
+                3,
+                ("Contraparte técnica por la empresa:", counterpart_name),
+            )
+            if counterpart_role:
+                rows.insert(4, ("Cargo del personal encargado:", counterpart_role))
 
         bullet_symbol = "❖"
         bullet_color = colors.HexColor("#2E7D32")

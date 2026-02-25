@@ -4,12 +4,14 @@ Aplicación principal con interfaz gráfica
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+import customtkinter as ctk
 from pathlib import Path
 from PIL import Image, ImageTk
 from tkcalendar import DateEntry
 import os
 import re
 import sys
+import json
 import shutil
 import subprocess
 import platform
@@ -23,6 +25,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.core.report_outline import get_content_outline
 from src.core.result_schemes import RESULT_SCHEMES
 from src.services.evaluators_repository import EvaluatorRepository, build_technical_details
+from src.services.counterparts_repository import CounterpartRepository
 
 
 class MainApplication:
@@ -30,10 +33,36 @@ class MainApplication:
     
     def __init__(self):
         """Inicializa la aplicación"""
-        self.root = tk.Tk()
+        ctk.set_appearance_mode("Light")
+        ctk.set_default_color_theme("green")
+        ctk.set_widget_scaling(1.25)
+        ctk.set_window_scaling(1.1)
+
+        self.colors = {
+            "bg": "#F7F8FA",
+            "surface": "#FFFFFF",
+            "border": "#EEF0F2",
+            "primary": "#1B7A3D",
+            "primary_dark": "#15632F",
+            "primary_muted": "#E8F5EC",
+            "field_bg": "#F3F6F4",
+            "field_border": "#D8E2DD",
+            "chip_bg": "#E6F3EA",
+            "chip_text": "#1B7A3D",
+            "error": "#D92D20",
+            "text": "#1A1D21",
+            "text_muted": "#5F6B7A",
+            "text_light": "#C8E6C9",
+            "info_bg": "#EBF5FB",
+            "info_border": "#BEE0F5",
+            "info_text": "#1565C0",
+        }
+
+        self.root = ctk.CTk()
         self.root.title("Generador de Informes Clínicos - CAIT Panamá")
-        self.root.geometry("1400x900")
-        self.root.minsize(1000, 700)
+        self.root.geometry("1500x980")
+        self.root.minsize(1150, 780)
+        self.root.configure(fg_color=self.colors["bg"])
         self.date_validation_cmd = self.root.register(self._validate_date_input)
         self.numeric_validation_cmd = self.root.register(self._validate_numeric_input)
         
@@ -86,184 +115,638 @@ class MainApplication:
         self.evaluator_var = tk.StringVar()
         self.evaluator_combo = None
         self.evaluator_detail_label = None
-        
-        # Ruta del logo de la aplicación
-        self.app_logo_path = Path(__file__).parent.parent / "assets" / "logo_cait.png"
+
+        # Catálogo de contrapartes técnicas
+        self.counterparts_repo = CounterpartRepository()
+        self.counterpart_profiles = {}
+        self.selected_counterpart_id = tk.StringVar()
+        self.counterpart_var = tk.StringVar(value="Sin contraparte")
+        self.counterpart_combo = None
+        self.counterpart_role_entry = None
         
         # Ruta base del proyecto
         self.project_root = Path(__file__).parent.parent.parent
+
+        # Ruta del logo de la aplicación
+        primary_logo = self.project_root / "logo-apli-removebg-preview.ico"
+        fallback_logo = Path(__file__).parent.parent / "assets" / "logo_cait.png"
+        self.app_logo_path = primary_logo if primary_logo.exists() else fallback_logo
         
         self.setup_styles()
         self.setup_ui()
+        self._purge_old_drafts()
     
     def setup_styles(self):
-        """Configura los estilos de la aplicación con colores verde naturaleza"""
-        style = ttk.Style()
-        style.theme_use('clam')
-        
-        # Colores verde naturaleza
-        verde_oscuro = "#1B5E20"
-        verde_medio = "#2E7D32"
-        verde_claro = "#4CAF50"
-        verde_muy_claro = "#C8E6C9"
-        blanco = "#FFFFFF"
-        gris_claro = "#F5F5F5"
-        
-        # Configurar colores
-        style.configure('TFrame', background=blanco)
-        style.configure('Header.TFrame', background=verde_oscuro)
-        style.configure('Header.TLabel', background=verde_oscuro, foreground=blanco, 
-                       font=("Arial", 18, "bold"))
-        style.configure('Title.TLabel', font=("Arial", 16, "bold"), foreground=verde_oscuro)
-        style.configure('Subtitle.TLabel', font=("Arial", 12), foreground=verde_medio)
-        style.configure('TLabel', background=blanco)
-        
-        # Botones verdes
-        style.configure('Action.TButton', font=("Arial", 10, "bold"))
-        style.map('Action.TButton',
-                 background=[('pressed', verde_oscuro), ('active', verde_claro)],
-                 foreground=[('active', blanco)])
-        
-        style.configure('Primary.TButton', font=("Arial", 11, "bold"))
-        style.map('Primary.TButton',
-                 background=[('pressed', verde_oscuro), ('active', verde_claro)],
-                 foreground=[('active', blanco)])
-        
-        style.configure('Menu.TButton', font=("Arial", 10), padding=8,
-                background=gris_claro, foreground=verde_medio)
-        style.map('Menu.TButton', background=[('active', verde_muy_claro)])
+        """Configura los estilos de la aplicación."""
+        style = ttk.Style(self.root)
+        style.theme_use("clam")
 
-        style.configure('MenuActive.TButton', font=("Arial", 10, "bold"), padding=8,
-                background=verde_medio, foreground=blanco)
-        style.map('MenuActive.TButton', background=[('active', verde_medio)])
-        
-        # Separadores
-        style.configure('TSeparator', background=verde_muy_claro)
+        bg = self.colors["bg"]
+        surface = self.colors["surface"]
+        border = self.colors["border"]
+        primary = self.colors["primary"]
+        primary_dark = self.colors["primary_dark"]
+        primary_muted = self.colors["primary_muted"]
+        text = self.colors["text"]
+        muted = self.colors["text_muted"]
+        field_bg = self.colors["field_bg"]
+
+        style.configure("TFrame", background=surface)
+        style.configure("Header.TFrame", background=primary)
+        style.configure(
+            "Header.TLabel",
+            background=primary,
+            foreground=surface,
+            font=("Segoe UI", 20, "bold"),
+        )
+        style.configure("Title.TLabel", font=("Segoe UI", 17, "bold"), foreground=primary)
+        style.configure("Subtitle.TLabel", font=("Segoe UI", 13), foreground=muted)
+        style.configure("TLabel", background=surface, foreground=text)
+
+        style.configure("Action.TButton", font=("Segoe UI", 11, "bold"), padding=7)
+        style.map(
+            "Action.TButton",
+            background=[("pressed", primary_dark), ("active", primary)],
+            foreground=[("active", surface)],
+        )
+
+        style.configure("Primary.TButton", font=("Segoe UI", 11, "bold"), padding=7)
+        style.map(
+            "Primary.TButton",
+            background=[("pressed", primary_dark), ("active", primary)],
+            foreground=[("active", surface)],
+        )
+
+        style.configure(
+            "Menu.TButton",
+            font=("Segoe UI", 11),
+            padding=9,
+            background=surface,
+            foreground=primary,
+        )
+        style.map("Menu.TButton", background=[("active", primary_muted)])
+
+        style.configure(
+            "MenuActive.TButton",
+            font=("Segoe UI", 11, "bold"),
+            padding=9,
+            background=primary,
+            foreground=surface,
+        )
+        style.map("MenuActive.TButton", background=[("active", primary)])
+
+        style.configure("TSeparator", background=border)
+
+        style.configure(
+            "Treeview",
+            background=surface,
+            fieldbackground=surface,
+            foreground=text,
+            bordercolor=border,
+            lightcolor=border,
+            darkcolor=border,
+            rowheight=28,
+        )
+        style.configure(
+            "Treeview.Heading",
+            background=primary_muted,
+            foreground=primary,
+            font=("Segoe UI", 11, "bold"),
+        )
+        style.map(
+            "Treeview",
+            background=[("selected", primary)],
+            foreground=[("selected", surface)],
+        )
+        style.configure("TEntry", fieldbackground=field_bg, padding=6)
+        style.configure("TCombobox", padding=6)
+
+    def _create_card(self, parent, padding: int = 16):
+        """Crea una tarjeta con bordes suaves y contenido interno."""
+
+        card = ctk.CTkFrame(
+            parent,
+            fg_color=self.colors["surface"],
+            corner_radius=16,
+            border_width=1,
+            border_color=self.colors["border"],
+        )
+        inner = ctk.CTkFrame(card, fg_color="transparent", corner_radius=0)
+        inner.pack(fill=tk.BOTH, expand=True, padx=padding, pady=padding)
+        return card, inner
+
+    def _create_section_header(self, parent, title: str, subtitle: str | None = None):
+        """Encabezado de seccion con tipografia consistente."""
+
+        wrapper = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
+        title_label = ctk.CTkLabel(
+            wrapper,
+            text=title,
+            font=ctk.CTkFont("Segoe UI", 16, "bold"),
+            text_color=self.colors["primary"],
+            anchor="w",
+        )
+        title_label.pack(anchor=tk.W)
+        if subtitle:
+            subtitle_label = ctk.CTkLabel(
+                wrapper,
+                text=subtitle,
+                font=ctk.CTkFont("Segoe UI", 11),
+                text_color=self.colors["text_muted"],
+                anchor="w",
+            )
+            subtitle_label.pack(anchor=tk.W, pady=(2, 0))
+        return wrapper
+
+    def _create_pill_label(self, parent, text: str):
+        """Etiqueta ovalada para indicar campos o bloques."""
+
+        return ctk.CTkLabel(
+            parent,
+            text=text,
+            fg_color=self.colors["chip_bg"],
+            text_color=self.colors["chip_text"],
+            corner_radius=999,
+            padx=12,
+            pady=4,
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+        )
+
+    def _create_text_entry(self, parent, text_var: tk.StringVar, width: int = 260):
+        """Campo de entrada con estilo moderno."""
+
+        return ctk.CTkEntry(
+            parent,
+            textvariable=text_var,
+            width=width,
+            height=36,
+            corner_radius=10,
+            border_width=1,
+            border_color=self.colors["field_border"],
+            fg_color=self.colors["field_bg"],
+            text_color=self.colors["text"],
+            font=ctk.CTkFont("Segoe UI", 11),
+        )
+
+    def _create_combo(self, parent, text_var: tk.StringVar, values: list[str], command=None, width: int = 260):
+        """Combo con estilo alineado a la interfaz."""
+        combo = ctk.CTkComboBox(
+            parent,
+            variable=text_var,
+            values=values,
+            width=width,
+            height=36,
+            state="readonly",
+            command=command,
+            corner_radius=10,
+            border_width=1,
+            border_color=self.colors["field_border"],
+            fg_color=self.colors["field_bg"],
+            text_color=self.colors["text"],
+            button_color=self.colors["primary"],
+            button_hover_color=self.colors["primary_dark"],
+            font=ctk.CTkFont("Segoe UI", 11),
+        )
+        self._bind_combo_click_anywhere(combo)
+        return combo
+
+    def _create_validated_entry(self, parent, text_var: tk.StringVar, width: int = 260):
+        """Crea un entry con etiqueta de error debajo."""
+
+        container = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
+        entry = self._create_text_entry(container, text_var, width=width)
+        entry.pack(fill=tk.X)
+        error_label = ctk.CTkLabel(
+            container,
+            text="",
+            font=ctk.CTkFont("Segoe UI", 9),
+            text_color=self.colors["error"],
+            anchor="w",
+        )
+        error_label.pack(anchor=tk.W, pady=(2, 0))
+        return container, entry, error_label
+
+    def _create_validated_combo(self, parent, text_var: tk.StringVar, values: list[str], command=None, width: int = 260):
+        """Crea un combo con etiqueta de error debajo."""
+
+        container = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
+        combo = self._create_combo(container, text_var, values, command=command, width=width)
+        combo.pack(fill=tk.X)
+        error_label = ctk.CTkLabel(
+            container,
+            text="",
+            font=ctk.CTkFont("Segoe UI", 9),
+            text_color=self.colors["error"],
+            anchor="w",
+        )
+        error_label.pack(anchor=tk.W, pady=(2, 0))
+        return container, combo, error_label
+
+    def _set_field_error(self, widget, error_label: ctk.CTkLabel, message: str | None) -> None:
+        """Marca un campo con error y muestra el mensaje."""
+
+        border_color = self.colors["field_border"]
+        if message:
+            border_color = self.colors["error"]
+            error_label.configure(text=message)
+        else:
+            error_label.configure(text="")
+
+        if widget is None:
+            return
+        try:
+            widget.configure(border_color=border_color)
+        except (tk.TclError, AttributeError):
+            pass
+
+    def _attach_required_validation(
+        self,
+        text_var: tk.StringVar,
+        widget,
+        error_label: ctk.CTkLabel,
+        message: str,
+        show_on_init: bool = False,
+    ):
+        """Valida que el campo no este vacio en cada cambio."""
+
+        def _validate(_evt=None):
+            value = (text_var.get() or "").strip()
+            self._set_field_error(widget, error_label, message if not value else None)
+            return bool(value)
+
+        widget.bind("<KeyRelease>", _validate)
+        widget.bind("<FocusOut>", _validate)
+        if show_on_init:
+            _validate()
+        return _validate
+
+    def _attach_date_validation(
+        self,
+        text_var: tk.StringVar,
+        wrapper,
+        error_label: ctk.CTkLabel,
+        show_on_init: bool = False,
+    ):
+        """Valida formato de fecha dd/MM/yyyy."""
+
+        def _validate(_evt=None):
+            value = (text_var.get() or "").strip()
+            if not value:
+                self._set_field_error(wrapper, error_label, "Requerido")
+                return False
+            try:
+                datetime.strptime(value, "%d/%m/%Y")
+            except ValueError:
+                self._set_field_error(wrapper, error_label, "Fecha invalida")
+                return False
+            self._set_field_error(wrapper, error_label, None)
+            return True
+
+        if show_on_init:
+            _validate()
+        return _validate
+
+    def _attach_numeric_validation(
+        self,
+        text_var: tk.StringVar,
+        widget,
+        error_label: ctk.CTkLabel,
+        message: str,
+        show_on_init: bool = False,
+    ):
+        """Valida que el valor sea numerico cuando no esta vacio."""
+
+        def _validate(_evt=None):
+            value = (text_var.get() or "").strip()
+            if value and not value.isdigit():
+                self._set_field_error(widget, error_label, message)
+                return False
+            self._set_field_error(widget, error_label, None)
+            return True
+
+        widget.bind("<KeyRelease>", _validate)
+        widget.bind("<FocusOut>", _validate)
+        if show_on_init:
+            _validate()
+        return _validate
+
+    def _format_panama_id(self, raw: str) -> str:
+        """Formatea la cedula panamena con guiones automaticamente."""
+
+        cleaned = (raw or "").upper().replace(" ", "")
+        if not cleaned:
+            return ""
+
+        prefix = ""
+        remainder = ""
+        if cleaned.startswith("PE"):
+            prefix = "PE"
+            remainder = cleaned[2:]
+        elif cleaned.startswith("E"):
+            prefix = "E"
+            remainder = cleaned[1:]
+        elif cleaned.startswith("N"):
+            prefix = "N"
+            remainder = cleaned[1:]
+        else:
+            match = re.match(r"^(\d{1,2})", cleaned)
+            if match:
+                candidate = match.group(0)
+                if candidate.isdigit() and 1 <= int(candidate) <= 13:
+                    prefix = candidate
+                    remainder = cleaned[len(prefix):]
+                else:
+                    remainder = cleaned
+            else:
+                remainder = cleaned
+
+        if "-" in remainder:
+            parts = [part for part in remainder.split("-") if part]
+            tomo = re.sub(r"\D", "", parts[0]) if len(parts) > 0 else ""
+            asiento = re.sub(r"\D", "", parts[1]) if len(parts) > 1 else ""
+        else:
+            digits = re.sub(r"\D", "", remainder)
+            tomo = digits[:4]
+            asiento = digits[4:9]
+
+        parts = [prefix] if prefix else []
+        if tomo:
+            parts.append(tomo)
+        if asiento:
+            parts.append(asiento)
+        return "-".join(parts)
+
+    def _sanitize_panama_id_input(self, raw: str) -> str:
+        """Permite solo prefijos E, N o PE y elimina letras no permitidas."""
+
+        value = (raw or "").upper().replace(" ", "")
+        if not value:
+            return ""
+
+        prefix = ""
+        if value.startswith("PE"):
+            prefix = "PE"
+            remainder = value[2:]
+        elif value.startswith("E"):
+            prefix = "E"
+            remainder = value[1:]
+        elif value.startswith("N"):
+            prefix = "N"
+            remainder = value[1:]
+        else:
+            remainder = value
+
+        remainder = re.sub(r"[^0-9-]", "", remainder)
+        return f"{prefix}{remainder}"
+
+    def _is_valid_panama_id(self, value: str) -> bool:
+        """Valida cedulas panamenas (nacionales y casos especiales)."""
+
+        if not value:
+            return False
+        cleaned = value.upper().strip()
+        patterns = [
+            r"^(1[0-3]|[1-9])-\d{1,4}-\d{1,5}$",
+            r"^E-\d{1,4}-\d{1,7}$",
+            r"^N-\d{1,4}-\d{1,5}$",
+            r"^PE-\d{1,4}-\d{1,5}$",
+        ]
+        return any(re.match(pattern, cleaned) for pattern in patterns)
+
+    def _attach_id_validation(
+        self,
+        text_var: tk.StringVar,
+        widget,
+        error_label: ctk.CTkLabel,
+        show_on_init: bool = False,
+    ):
+        """Valida y formatea la cedula panamena en tiempo real."""
+
+        def _validate(_evt=None):
+            sanitized = self._sanitize_panama_id_input(text_var.get())
+            if sanitized != text_var.get():
+                text_var.set(sanitized)
+            value = (text_var.get() or "").strip()
+            if not value:
+                self._set_field_error(widget, error_label, "Requerido")
+                return False
+            if not self._is_valid_panama_id(value):
+                self._set_field_error(widget, error_label, "Cedula invalida")
+                return False
+            self._set_field_error(widget, error_label, None)
+            return True
+
+        def _format_on_blur(_evt=None):
+            formatted = self._format_panama_id(text_var.get())
+            if formatted:
+                text_var.set(formatted)
+            _validate()
+
+        widget.bind("<KeyRelease>", _validate)
+        widget.bind("<FocusOut>", _format_on_blur)
+        if show_on_init:
+            _validate()
+        return _validate
+
+    def _bind_combo_click_anywhere(self, combo: ctk.CTkComboBox) -> None:
+        """Abre el desplegable al hacer clic en cualquier parte del combo."""
+
+        click_handler = getattr(combo, "_clicked", None)
+        canvas = getattr(combo, "_canvas", None)
+        entry = getattr(combo, "_entry", None)
+        if not callable(click_handler) or canvas is None:
+            return
+
+        for tag in ("inner_parts_left", "border_parts_left", "inner_parts_right", "border_parts_right"):
+            try:
+                canvas.tag_bind(tag, "<Button-1>", click_handler)
+            except tk.TclError:
+                continue
+
+        if entry is not None:
+            entry.bind("<Button-1>", click_handler)
     
     def setup_ui(self):
         """Configura la interfaz de usuario"""
-        # Colores verde naturaleza
-        verde_oscuro = "#1B5E20"
-        verde_medio = "#2E7D32"
-        verde_claro = "#4CAF50"
-        
-        # Frame principal
-        main_container = ttk.Frame(self.root)
+        primary = self.colors["primary"]
+        primary_dark = self.colors["primary_dark"]
+        primary_muted = self.colors["primary_muted"]
+        surface = self.colors["surface"]
+        border = self.colors["border"]
+        text = self.colors["text"]
+        text_muted = self.colors["text_muted"]
+
+        main_container = ctk.CTkFrame(self.root, fg_color=self.colors["bg"], corner_radius=0)
         main_container.pack(fill=tk.BOTH, expand=True)
-        
-        # Header con color verde oscuro - Marco de Tkinter en lugar de ttk
-        header_frame = tk.Frame(main_container, bg=verde_oscuro)
-        header_frame.pack(fill=tk.X, pady=0)
-        
-        # Frame interno para el contenido del header
-        header_content = tk.Frame(header_frame, bg=verde_oscuro)
-        header_content.pack(pady=15, padx=20, fill=tk.X)
-        
-        # Intentar cargar el logo
+
+        header_frame = ctk.CTkFrame(main_container, fg_color=primary, corner_radius=0)
+        header_frame.pack(fill=tk.X)
+
+        header_content = ctk.CTkFrame(header_frame, fg_color=primary, corner_radius=0)
+        header_content.pack(pady=16, padx=20, fill=tk.X)
+
         try:
             if self.app_logo_path.exists():
                 img = Image.open(self.app_logo_path)
-                # Redimensionar logo (150x150 píxeles - más grande)
-                img.thumbnail((150, 150), Image.Resampling.LANCZOS)
-                self.logo_image = ImageTk.PhotoImage(img)
-                
-                logo_label = tk.Label(header_content, image=self.logo_image, bg=verde_oscuro, highlightthickness=0)
-                logo_label.pack(side=tk.LEFT, padx=10)
+                logo_size = (56, 56)
+                self.logo_image = ctk.CTkImage(light_image=img, size=logo_size)
+                logo_label = ctk.CTkLabel(
+                    header_content,
+                    image=self.logo_image,
+                    text="",
+                    fg_color=primary,
+                )
+                logo_label.pack(side=tk.LEFT, padx=(0, 12))
         except Exception as e:
             print(f"No se pudo cargar el logo: {e}")
-        
-        # Texto del header
-        text_frame = tk.Frame(header_content, bg=verde_oscuro)
-        text_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10)
-        
-        title_label = tk.Label(text_frame, 
-                              text="CENTRO DE ATENCIÓN INTEGRAL TERAPÉUTICO PANAMÁ",
-                              font=("Arial", 14, "bold"),
-                              fg="white",
-                              bg=verde_oscuro)
-        title_label.pack(anchor=tk.W)
-        
-        subtitle_label = tk.Label(text_frame,
-                                 text="Generador de Informes Clínicos",
-                                 font=("Arial", 11),
-                                 fg="#C8E6C9",
-                                 bg=verde_oscuro)
-        subtitle_label.pack(anchor=tk.W)
-        
-        # Separador
-        ttk.Separator(main_container, orient='horizontal').pack(fill=tk.X)
-        
-        # Contenido principal
-        content_frame = ttk.Frame(main_container)
-        content_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
-        # Sección de acciones rápidas
-        actions_header = ttk.Frame(content_frame)
-        actions_header.pack(fill=tk.X, pady=(0, 15))
 
-        ttk.Label(
-            actions_header,
-            text="Acciones Principales",
-            style='Title.TLabel',
-        ).pack(side=tk.LEFT)
-        
-        # Botones principales
-        buttons_frame = ttk.Frame(content_frame)
-        buttons_frame.pack(fill=tk.X, pady=10)
-        
-        right_buttons = ttk.Frame(buttons_frame)
-        right_buttons.pack(anchor=tk.E, fill=tk.X)
+        text_frame = ctk.CTkFrame(header_content, fg_color=primary, corner_radius=0)
+        text_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        help_icon = tk.Label(
-            right_buttons,
-            text="?",
-            font=("Arial", 10, "bold"),
-            fg=verde_oscuro,
-            bg="#E8F5E9",
-            relief=tk.RIDGE,
-            width=2,
-            padx=2,
-            pady=1,
+        title_label = ctk.CTkLabel(
+            text_frame,
+            text="CENTRO DE ATENCIÓN INTEGRAL TERAPÉUTICO PANAMÁ",
+            font=ctk.CTkFont("Segoe UI", 16, "bold"),
+            text_color=surface,
+            anchor="w",
         )
-        help_icon.pack(side=tk.LEFT, padx=(0, 8))
+        title_label.pack(anchor=tk.W)
+
+        subtitle_label = ctk.CTkLabel(
+            text_frame,
+            text="Generador de Informes Clínicos",
+            font=ctk.CTkFont("Segoe UI", 12),
+            text_color=self.colors["text_light"],
+            anchor="w",
+        )
+        subtitle_label.pack(anchor=tk.W)
+
+        help_button = ctk.CTkButton(
+            header_content,
+            text="Ayuda",
+            fg_color="transparent",
+            hover_color="#1F8543",
+            text_color=surface,
+            border_width=1,
+            border_color="#2B8B4F",
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+            height=32,
+            corner_radius=8,
+        )
+        help_button.pack(side=tk.RIGHT)
         self._attach_tooltip(
-            help_icon,
+            help_button,
             "Crear informe genera solo el PDF. Exportar ZIP guarda el PDF y todos los adjuntos, "
             "ordenados en carpetas.",
         )
 
-        ttk.Button(
+        ttk.Separator(main_container, orient="horizontal").pack(fill=tk.X)
+
+        content_frame = ctk.CTkFrame(main_container, fg_color=self.colors["bg"], corner_radius=0)
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=16, pady=12)
+
+        actions_header = ctk.CTkFrame(content_frame, fg_color=self.colors["bg"], corner_radius=0)
+        actions_header.pack(fill=tk.X, pady=(0, 6))
+
+        ctk.CTkLabel(
+            actions_header,
+            text="Acciones Principales",
+            font=ctk.CTkFont("Segoe UI", 14, "bold"),
+            text_color=text,
+        ).pack(side=tk.LEFT)
+
+        right_buttons = ctk.CTkFrame(actions_header, fg_color=self.colors["bg"], corner_radius=0)
+        right_buttons.pack(side=tk.RIGHT)
+
+        ctk.CTkButton(
             right_buttons,
-            text="📄 Crear informe (solo PDF)",
-            command=self.create_and_generate_pdf,
-            style='Primary.TButton',
-        ).pack(side=tk.LEFT, padx=5)
-        ttk.Button(
+            text="+ Nuevo informe",
+            fg_color=primary_muted,
+            text_color=primary,
+            hover_color="#D4EDDA",
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+            corner_radius=10,
+            height=36,
+            command=self._reset_form_state,
+        ).pack(side=tk.LEFT, padx=6)
+
+        ctk.CTkButton(
             right_buttons,
-            text="📦 Exportar paquete ZIP (PDF + adjuntos)",
+            text="Guardar borrador",
+            fg_color=primary_muted,
+            text_color=primary,
+            hover_color="#D4EDDA",
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+            corner_radius=10,
+            height=36,
+            command=self.save_report_draft,
+        ).pack(side=tk.LEFT, padx=6)
+
+        ctk.CTkButton(
+            right_buttons,
+            text="Cargar borrador",
+            fg_color="transparent",
+            text_color=primary,
+            border_width=2,
+            border_color=primary,
+            hover_color=primary_muted,
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+            corner_radius=10,
+            height=36,
+            command=self.load_report_draft,
+        ).pack(side=tk.LEFT, padx=6)
+
+        ctk.CTkButton(
+            right_buttons,
+            text="Exportar ZIP",
+            fg_color=primary,
+            text_color=surface,
+            hover_color=primary_dark,
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+            corner_radius=10,
+            height=36,
             command=self.export_zip,
-            style='Primary.TButton',
-        ).pack(side=tk.LEFT, padx=5)
+        ).pack(side=tk.LEFT, padx=6)
 
-        ttk.Label(content_frame, text="", style='Subtitle.TLabel').pack(pady=(0, 2))
+        ttk.Separator(content_frame, orient="horizontal").pack(fill=tk.X, pady=8)
 
-        # Separador
-        ttk.Separator(content_frame, orient='horizontal').pack(fill=tk.X, pady=10)
-
-        # Contenido principal con menú lateral y secciones
-        body_frame = ttk.Frame(content_frame)
+        body_frame = ctk.CTkFrame(content_frame, fg_color=self.colors["bg"], corner_radius=0)
         body_frame.pack(fill=tk.BOTH, expand=True)
 
-        menu_frame = ttk.Frame(body_frame)
-        menu_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 15))
+        menu_frame = ctk.CTkFrame(
+            body_frame,
+            fg_color=surface,
+            corner_radius=12,
+            border_width=1,
+            border_color=border,
+            width=260,
+        )
+        menu_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 16))
 
-        sections_container = ttk.Frame(body_frame)
+        menu_header = ctk.CTkFrame(menu_frame, fg_color=surface, corner_radius=0)
+        menu_header.pack(fill=tk.X, padx=14, pady=(14, 6))
+        ctk.CTkLabel(
+            menu_header,
+            text="Secciones del Informe",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            text_color=text_muted,
+            anchor="w",
+        ).pack(fill=tk.X)
+        ttk.Separator(menu_frame, orient="horizontal").pack(fill=tk.X, padx=12, pady=(0, 8))
+
+        sections_container = ctk.CTkFrame(
+            body_frame,
+            fg_color=self.colors["bg"],
+            corner_radius=0,
+        )
         sections_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sections_container.grid_rowconfigure(0, weight=1)
         sections_container.grid_columnconfigure(0, weight=1)
 
         self.company_section_name = "Datos de la Empresa"
+        self.drafts_section_name = "Borradores"
         additional_sections = [
+            self.drafts_section_name,
             self.company_section_name,
             self.results_section_name,
             self.conclusion_section_name,
@@ -275,8 +758,10 @@ class MainApplication:
         self.section_names = ["Presentación del informe", "Contenido del informe"] + additional_sections
         self.section_buttons = {}
         self.section_frames = {}
+        self.section_bodies = {}
         self.sections_container = sections_container
         self.content_outline_labels = []
+        self.drafts_tree = None
 
         # Variables del formulario principal
         self.report_type_var = tk.StringVar(value="audiometría")
@@ -290,113 +775,252 @@ class MainApplication:
         self.country_var = tk.StringVar()
         self.study_dates_var = tk.StringVar(value=self.date_var.get())
 
-        button_width = 26
         for name in self.section_names:
-            btn = ttk.Button(
+            btn = ctk.CTkButton(
                 menu_frame,
                 text=name,
-                style='Menu.TButton',
+                fg_color="transparent",
+                text_color=primary,
+                hover_color=primary_muted,
+                font=ctk.CTkFont("Segoe UI", 11),
+                corner_radius=8,
+                height=36,
+                anchor="w",
                 command=lambda n=name: self.show_section(n),
-                width=button_width,
             )
-            btn.pack(fill=tk.X, pady=2)
+            btn.pack(fill=tk.X, padx=10, pady=4)
             self.section_buttons[name] = btn
 
-            frame = ttk.Frame(sections_container)
-            frame.grid(row=0, column=0, sticky="nsew")
+            frame = ctk.CTkFrame(
+                sections_container,
+                fg_color=surface,
+                corner_radius=12,
+                border_width=1,
+                border_color=border,
+            )
+            frame.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
             self.section_frames[name] = frame
+            if name == self.results_section_name:
+                self.section_bodies[name] = frame
+            else:
+                self.section_bodies[name] = self._create_scrollable_section(frame)
 
         self._build_presentation_section()
         self._build_content_section()
         self._build_additional_sections()
         self.show_section(self.section_names[0])
         
-        # Separador final
-        ttk.Separator(content_frame, orient='horizontal').pack(fill=tk.X, pady=10)
-        
-        # Mensajes de estado
-        self.status_label = ttk.Label(content_frame, 
-                                     text="Listo para crear un nuevo informe",
-                                     font=("Arial", 10),
-                                     foreground="#2E7D32")
+        progress_frame = ctk.CTkFrame(menu_frame, fg_color=surface, corner_radius=0)
+        progress_frame.pack(fill=tk.X, padx=12, pady=(8, 12), side=tk.BOTTOM)
+        self.progress_caption = ctk.CTkLabel(
+            progress_frame,
+            text="Progreso del informe",
+            font=ctk.CTkFont("Segoe UI", 9),
+            text_color=text_muted,
+            anchor="w",
+        )
+        self.progress_caption.pack(anchor=tk.W)
+        self.progress_bar = ctk.CTkProgressBar(
+            progress_frame,
+            height=6,
+            fg_color=border,
+            progress_color=primary,
+            corner_radius=4,
+        )
+        self.progress_bar.pack(fill=tk.X, pady=(6, 6))
+        self.progress_label = ctk.CTkLabel(
+            progress_frame,
+            text="",
+            font=ctk.CTkFont("Segoe UI", 9),
+            text_color=text_muted,
+            anchor="w",
+        )
+        self.progress_label.pack(anchor=tk.W)
+        self._update_section_progress()
+
+        ttk.Separator(content_frame, orient="horizontal").pack(fill=tk.X, pady=10)
+
+        self.status_label = ctk.CTkLabel(
+            content_frame,
+            text="Listo para crear un nuevo informe",
+            font=ctk.CTkFont("Segoe UI", 10),
+            text_color=primary,
+            anchor="w",
+        )
         self.status_label.pack(pady=10, anchor=tk.W)
     
     def _build_presentation_section(self):
         """Construye la sección de presentación del informe."""
 
-        frame = self.section_frames.get("Presentación del informe")
+        frame = self.section_bodies.get("Presentación del informe")
         if frame is None:
             return
 
-        info_label = ttk.Label(frame, text="Información del Informe", style='Title.TLabel')
-        info_label.pack(pady=(0, 15), anchor=tk.W)
-
-        info_frame = ttk.Frame(frame)
-        info_frame.pack(fill=tk.X, pady=10)
-
-        ttk.Label(info_frame, text="Tipo de Informe:", style='Subtitle.TLabel').grid(
-            row=0, column=0, sticky=tk.W, pady=5)
-        type_combo = ttk.Combobox(info_frame, textvariable=self.report_type_var,
-                                  values=[
-                                      "audiometría",
-                                      "espirometría",
-                                      "audiometría + espirometría"
-                                  ],
-                                  state='readonly', width=30)
-        type_combo.grid(row=0, column=1, sticky=tk.W, padx=10, pady=5)
-        type_combo.bind("<<ComboboxSelected>>", self._handle_report_type_change)
-
-        ttk.Label(info_frame, text="Empresa:", style='Subtitle.TLabel').grid(
-            row=1, column=0, sticky=tk.W, pady=5)
-        ttk.Entry(info_frame, textvariable=self.company_var, width=32).grid(
-            row=1, column=1, sticky=tk.EW, padx=10, pady=5)
-
-        ttk.Label(info_frame, text="Ubicación/Sede:", style='Subtitle.TLabel').grid(
-            row=2, column=0, sticky=tk.W, pady=5)
-        ttk.Entry(info_frame, textvariable=self.location_var, width=32).grid(
-            row=2, column=1, sticky=tk.EW, padx=10, pady=5)
-
-        ttk.Label(info_frame, text="Evaluador/Responsable:", style='Subtitle.TLabel').grid(
-            row=3, column=0, sticky=tk.W, pady=5)
-        self.evaluator_combo = ttk.Combobox(
-            info_frame,
-            textvariable=self.evaluator_var,
-            values=[],
-            state='readonly',
-            width=30,
+        for child in frame.winfo_children():
+            child.destroy()
+        header = self._create_section_header(
+            frame,
+            "Información del Informe",
+            "Complete los datos generales de presentación del informe clínico.",
         )
-        self.evaluator_combo.grid(row=3, column=1, sticky=tk.EW, padx=10, pady=5)
-        self.evaluator_combo.bind("<<ComboboxSelected>>", self._handle_evaluator_selection)
+        header.pack(anchor=tk.W, pady=(0, 16), fill=tk.X)
 
-        ttk.Button(
-            info_frame,
-            text="Agregar evaluador",
-            style='Action.TButton',
+        card, card_body = self._create_card(frame)
+        card.pack(fill=tk.X, pady=4)
+
+        form = ctk.CTkFrame(card_body, fg_color="transparent", corner_radius=0)
+        form.pack(fill=tk.X)
+        form.grid_columnconfigure(1, weight=1)
+        form.grid_columnconfigure(3, weight=1)
+
+        self._create_pill_label(form, "Tipo de informe *").grid(row=0, column=0, sticky=tk.W, pady=8)
+        type_combo = self._create_combo(
+            form,
+            self.report_type_var,
+            ["audiometría", "espirometría", "audiometría + espirometría"],
+            command=lambda _value=None: self._handle_report_type_change(),
+            width=280,
+        )
+        type_combo.grid(row=0, column=1, sticky=tk.EW, padx=12, pady=8)
+
+        self._create_pill_label(form, "Empresa *").grid(row=1, column=0, sticky=tk.W, pady=8)
+        company_container, company_entry, company_error = self._create_validated_entry(
+            form, self.company_var, width=280
+        )
+        company_container.grid(row=1, column=1, sticky=tk.EW, padx=12, pady=8)
+        self._attach_required_validation(self.company_var, company_entry, company_error, "Requerido")
+
+        self._create_pill_label(form, "Ubicación / Sede *").grid(row=2, column=0, sticky=tk.W, pady=8)
+        location_container, location_entry, location_error = self._create_validated_entry(
+            form, self.location_var, width=280
+        )
+        location_container.grid(row=2, column=1, sticky=tk.EW, padx=12, pady=8)
+        self._attach_required_validation(self.location_var, location_entry, location_error, "Requerido")
+
+        self._create_pill_label(form, "Evaluador / Responsable *").grid(row=3, column=0, sticky=tk.W, pady=8)
+        evaluator_container, self.evaluator_combo, evaluator_error = self._create_validated_combo(
+            form,
+            self.evaluator_var,
+            [],
+            command=lambda _value=None: self._handle_evaluator_selection(),
+            width=280,
+        )
+        evaluator_container.grid(row=3, column=1, sticky=tk.EW, padx=12, pady=8)
+        self._attach_required_validation(self.evaluator_var, self.evaluator_combo, evaluator_error, "Requerido")
+
+        evaluator_actions = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
+        evaluator_actions.grid(row=3, column=2, rowspan=2, sticky=tk.NW, padx=6, pady=8)
+        ctk.CTkButton(
+            evaluator_actions,
+            text="Agregar",
+            fg_color=self.colors["primary_muted"],
+            text_color=self.colors["primary"],
+            hover_color="#D4EDDA",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
             command=self._open_add_evaluator_dialog,
-        ).grid(row=3, column=2, sticky=tk.W, padx=5, pady=5)
+        ).pack(side=tk.LEFT, padx=(0, 6))
+        ctk.CTkButton(
+            evaluator_actions,
+            text="Eliminar",
+            fg_color="transparent",
+            text_color=self.colors["primary"],
+            border_width=1,
+            border_color=self.colors["primary"],
+            hover_color=self.colors["primary_muted"],
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
+            command=self._remove_selected_evaluator,
+        ).pack(side=tk.LEFT)
 
-        self.evaluator_detail_label = ttk.Label(
-            info_frame,
+        self.evaluator_detail_label = ctk.CTkLabel(
+            form,
             text="",
-            style='Subtitle.TLabel',
+            font=ctk.CTkFont("Segoe UI", 10),
+            text_color=self.colors["text_muted"],
+            anchor="w",
         )
-        self.evaluator_detail_label.grid(row=4, column=1, columnspan=2, sticky=tk.W, pady=(0, 5))
+        self.evaluator_detail_label.grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=12, pady=(0, 6))
 
+        self._create_pill_label(form, "Contraparte tecnica").grid(row=5, column=0, sticky=tk.W, pady=8)
+        counterpart_container, self.counterpart_combo, _counterpart_error = self._create_validated_combo(
+            form,
+            self.counterpart_var,
+            ["Sin contraparte"],
+            command=lambda _value=None: self._handle_counterpart_selection(),
+            width=280,
+        )
+        counterpart_container.grid(row=5, column=1, sticky=tk.EW, padx=12, pady=8)
 
-        ttk.Label(info_frame, text="Fecha de Evaluación:", style='Subtitle.TLabel').grid(
-            row=5, column=0, sticky=tk.W, pady=5)
-        self._create_date_entry(info_frame, self.date_var, width=20).grid(
-            row=5, column=1, sticky=tk.W, padx=10, pady=5)
+        counterpart_actions = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
+        counterpart_actions.grid(row=5, column=2, rowspan=2, sticky=tk.NW, padx=6, pady=8)
+        ctk.CTkButton(
+            counterpart_actions,
+            text="Agregar",
+            fg_color=self.colors["primary_muted"],
+            text_color=self.colors["primary"],
+            hover_color="#D4EDDA",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
+            command=self._open_add_counterpart_dialog,
+        ).pack(side=tk.LEFT, padx=(0, 6))
+        ctk.CTkButton(
+            counterpart_actions,
+            text="Eliminar",
+            fg_color="transparent",
+            text_color=self.colors["primary"],
+            border_width=1,
+            border_color=self.colors["primary"],
+            hover_color=self.colors["primary_muted"],
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
+            command=self._remove_selected_counterpart,
+        ).pack(side=tk.LEFT)
 
-        info_frame.columnconfigure(1, weight=1)
+        self._create_pill_label(form, "Cargo contraparte").grid(row=6, column=0, sticky=tk.W, pady=8)
+        counterpart_role_container, self.counterpart_role_entry, _counterpart_role_error = (
+            self._create_validated_entry(form, self.counterpart_role_var, width=280)
+        )
+        counterpart_role_container.grid(row=6, column=1, sticky=tk.EW, padx=12, pady=8)
+
+        self._create_pill_label(form, "Fecha de evaluación *").grid(row=7, column=0, sticky=tk.W, pady=8)
+        date_container = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
+        date_container.grid(row=7, column=1, sticky=tk.W, padx=12, pady=8)
+        date_wrapper = ctk.CTkFrame(
+            date_container,
+            fg_color=self.colors["field_bg"],
+            corner_radius=10,
+            border_width=1,
+            border_color=self.colors["field_border"],
+        )
+        date_wrapper.pack(anchor=tk.W)
+        date_entry = self._create_date_entry(date_wrapper, self.date_var, width=18)
+        date_entry.pack(padx=8, pady=6)
+        date_error = ctk.CTkLabel(
+            date_container,
+            text="",
+            font=ctk.CTkFont("Segoe UI", 9),
+            text_color=self.colors["error"],
+            anchor="w",
+        )
+        date_error.pack(anchor=tk.W, pady=(2, 0))
+        self._attach_date_validation(self.date_var, date_wrapper, date_error)
+
         self._reload_evaluators()
+        self._reload_counterparts()
 
-        helper_text = ttk.Label(
+        helper_text = ctk.CTkLabel(
             frame,
             text="Selecciona otras partes del informe desde el menú lateral para continuar.",
-            style='Subtitle.TLabel'
+            font=ctk.CTkFont("Segoe UI", 10),
+            text_color=self.colors["text_muted"],
+            anchor="w",
         )
-        helper_text.pack(anchor=tk.W, pady=(5, 0))
+        helper_text.pack(anchor=tk.W, pady=(10, 0))
 
     def _reload_evaluators(self, prefer_id=None) -> None:
         """Carga o actualiza el listado de evaluadores desde el repositorio."""
@@ -419,6 +1043,195 @@ class MainApplication:
             target_id = profiles[0].get("id")
         if target_id:
             self._select_evaluator(target_id, update_combo=True)
+
+    def _reload_counterparts(self, prefer_id: str | None = None) -> None:
+        """Carga o actualiza el listado de contrapartes desde el repositorio."""
+
+        profiles = self.counterparts_repo.list_all()
+        self.counterpart_profiles = {
+            profile.get("id"): profile
+            for profile in profiles
+            if profile.get("id")
+        }
+        labels = [self._format_counterpart_label(profile) for profile in profiles]
+        options = ["Sin contraparte"] + labels
+
+        if self.counterpart_combo is not None:
+            self.counterpart_combo.configure(values=options)
+
+        target_id = prefer_id or self.selected_counterpart_id.get()
+        if target_id and target_id in self.counterpart_profiles:
+            self._select_counterpart(target_id, update_combo=True)
+            return
+
+        self._select_counterpart(None, update_combo=True)
+
+    def _format_counterpart_label(self, profile: dict) -> str:
+        """Formatea la etiqueta visible de una contraparte."""
+
+        name = (profile.get("name") or "").strip()
+        role = (profile.get("role") or "").strip()
+        return f"{name} ({role})" if role else name
+
+    def _select_counterpart(self, counterpart_id: str | None, update_combo: bool = False) -> None:
+        """Aplica la selección de contraparte y actualiza los campos."""
+
+        if not counterpart_id or counterpart_id not in self.counterpart_profiles:
+            self.selected_counterpart_id.set("")
+            self.company_counterpart_var.set("")
+            self.counterpart_role_var.set("")
+            self._set_counterpart_role_state(False)
+            if update_combo and self.counterpart_combo is not None:
+                self.counterpart_var.set("Sin contraparte")
+                self.counterpart_combo.set("Sin contraparte")
+            return
+
+        profile = self.counterpart_profiles[counterpart_id]
+        self.selected_counterpart_id.set(counterpart_id)
+        self.company_counterpart_var.set(profile.get("name", ""))
+        self.counterpart_role_var.set(profile.get("role", ""))
+        self._set_counterpart_role_state(True)
+        if update_combo and self.counterpart_combo is not None:
+            label = self._format_counterpart_label(profile)
+            self.counterpart_var.set(label)
+            self.counterpart_combo.set(label)
+
+    def _handle_counterpart_selection(self, *_args) -> None:
+        """Sincroniza la contraparte seleccionada desde el combo."""
+
+        selected_label = (self.counterpart_var.get() or "").strip()
+        if not selected_label or selected_label == "Sin contraparte":
+            self._select_counterpart(None, update_combo=True)
+            return
+
+        for counter_id, profile in self.counterpart_profiles.items():
+            if self._format_counterpart_label(profile) == selected_label:
+                self._select_counterpart(counter_id)
+                return
+
+        self._select_counterpart(None, update_combo=True)
+
+    def _set_counterpart_role_state(self, enabled: bool) -> None:
+        """Activa o desactiva el campo de cargo de la contraparte."""
+
+        if self.counterpart_role_entry is None:
+            return
+        state = "normal" if enabled else "disabled"
+        self.counterpart_role_entry.configure(state=state)
+
+    def _open_add_counterpart_dialog(self) -> None:
+        """Muestra el cuadro para agregar una nueva contraparte tecnica."""
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Nueva contraparte tecnica")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        name_var = tk.StringVar()
+        role_var = tk.StringVar()
+
+        container = ttk.Frame(dialog, padding=15)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(container, text="Nombre completo:", style="Subtitle.TLabel").grid(
+            row=0, column=0, sticky=tk.W, pady=4
+        )
+        ttk.Entry(container, textvariable=name_var, width=40).grid(row=0, column=1, sticky=tk.EW, pady=4)
+
+        ttk.Label(container, text="Cargo / rol:", style="Subtitle.TLabel").grid(
+            row=1, column=0, sticky=tk.W, pady=4
+        )
+        ttk.Entry(container, textvariable=role_var, width=40).grid(row=1, column=1, sticky=tk.EW, pady=4)
+
+        buttons = ttk.Frame(container)
+        buttons.grid(row=2, column=0, columnspan=2, sticky=tk.E, pady=(12, 0))
+        ttk.Button(buttons, text="Cancelar", command=dialog.destroy).pack(side=tk.RIGHT, padx=5)
+
+        def _save_counterpart():
+            name = name_var.get().strip()
+            if not name:
+                messagebox.showwarning("Datos incompletos", "El nombre de la contraparte es obligatorio.")
+                return
+
+            try:
+                new_entry = self.counterparts_repo.add_counterpart(
+                    {
+                        "name": name,
+                        "role": role_var.get().strip(),
+                    }
+                )
+            except ValueError as exc:
+                messagebox.showerror("No se pudo guardar", str(exc))
+                return
+
+            dialog.destroy()
+            self._reload_counterparts(prefer_id=new_entry.get("id"))
+
+        ttk.Button(buttons, text="Guardar", style="Primary.TButton", command=_save_counterpart).pack(
+            side=tk.RIGHT
+        )
+        container.columnconfigure(1, weight=1)
+        self._center_window(dialog)
+
+    def _center_window(self, window: tk.Toplevel) -> None:
+        """Centra un dialogo relativo a la ventana principal."""
+
+        window.update_idletasks()
+        root_x = self.root.winfo_x()
+        root_y = self.root.winfo_y()
+        root_w = self.root.winfo_width()
+        root_h = self.root.winfo_height()
+
+        win_w = window.winfo_width()
+        win_h = window.winfo_height()
+        if win_w <= 1 or win_h <= 1:
+            win_w = window.winfo_reqwidth()
+            win_h = window.winfo_reqheight()
+
+        pos_x = root_x + (root_w - win_w) // 2
+        pos_y = root_y + (root_h - win_h) // 2
+        window.geometry(f"{win_w}x{win_h}+{pos_x}+{pos_y}")
+
+    def _remove_selected_counterpart(self) -> None:
+        """Elimina la contraparte seleccionada del catalogo."""
+
+        counterpart_id = self.selected_counterpart_id.get()
+        if not counterpart_id:
+            messagebox.showinfo("Sin seleccion", "Selecciona una contraparte para eliminarla.")
+            return
+
+        profile = self.counterpart_profiles.get(counterpart_id, {})
+        name = profile.get("name", "contraparte")
+        confirm = messagebox.askyesno(
+            "Confirmar eliminacion",
+            f"Se eliminara la contraparte '{name}'. ¿Deseas continuar?",
+        )
+        if not confirm:
+            return
+
+        if self.counterparts_repo.remove_counterpart(counterpart_id):
+            self._reload_counterparts()
+
+    def _remove_selected_evaluator(self) -> None:
+        """Elimina el evaluador seleccionado del catalogo."""
+
+        evaluator_id = self.selected_evaluator_id.get()
+        if not evaluator_id:
+            messagebox.showinfo("Sin seleccion", "Selecciona un evaluador para eliminarlo.")
+            return
+
+        profile = self.evaluator_profiles.get(evaluator_id, {})
+        name = profile.get("name", "evaluador")
+        confirm = messagebox.askyesno(
+            "Confirmar eliminacion",
+            f"Se eliminara el evaluador '{name}'. ¿Deseas continuar?",
+        )
+        if not confirm:
+            return
+
+        if self.evaluators_repo.remove_evaluator(evaluator_id):
+            self._reload_evaluators()
 
     def _select_evaluator(self, evaluator_id: str, update_combo: bool = False) -> None:
         """Aplica la selección actualizando campos dependientes."""
@@ -593,6 +1406,7 @@ class MainApplication:
 
         ttk.Button(buttons, text="Guardar", style='Primary.TButton', command=_save_new_evaluator).pack(side=tk.RIGHT)
         container.columnconfigure(1, weight=1)
+        self._center_window(dialog)
 
     def _get_selected_evaluator_profile(self):
         """Obtiene el diccionario del evaluador actualmente seleccionado."""
@@ -757,26 +1571,36 @@ class MainApplication:
     def _build_content_section(self):
         """Construye la sección de vista previa del índice de contenido."""
 
-        frame = self.section_frames.get("Contenido del informe")
+        frame = self.section_bodies.get("Contenido del informe")
         if frame is None:
             return
 
-        ttk.Label(frame, text="Contenido del informe", style='Title.TLabel').pack(anchor=tk.W, pady=(0, 10))
-        ttk.Label(
+        for child in frame.winfo_children():
+            child.destroy()
+
+        header = self._create_section_header(
             frame,
-            text="Esta página siempre mostrará el índice del informe usando la plantilla oficial.",
-            style='Subtitle.TLabel'
-        ).pack(anchor=tk.W)
+            "Contenido del informe",
+            "Esta pagina siempre mostrara el indice del informe usando la plantilla oficial.",
+        )
+        header.pack(anchor=tk.W, pady=(0, 16), fill=tk.X)
 
-        ttk.Separator(frame, orient='horizontal').pack(fill=tk.X, pady=10)
+        card, card_body = self._create_card(frame)
+        card.pack(fill=tk.BOTH, expand=True)
 
-        list_container = ttk.Frame(frame)
+        list_container = ctk.CTkFrame(card_body, fg_color="transparent", corner_radius=0)
         list_container.pack(fill=tk.BOTH, expand=True)
 
         self.content_outline_labels = []
         outline = get_content_outline(self.report_type_var.get())
         for title in outline:
-            label = ttk.Label(list_container, text=f"- {title}", style='Subtitle.TLabel')
+            label = ctk.CTkLabel(
+                list_container,
+                text=f"• {title}",
+                font=ctk.CTkFont("Segoe UI", 11),
+                text_color=self.colors["text_muted"],
+                anchor="w",
+            )
             label.pack(anchor=tk.W, pady=4)
             self.content_outline_labels.append(label)
 
@@ -786,12 +1610,15 @@ class MainApplication:
         """Crea marcos de contenido para las demás partes del informe."""
 
         for name in self.section_names[2:]:
-            frame = self.section_frames.get(name)
+            frame = self.section_bodies.get(name)
             if frame is None:
                 continue
 
             if name == self.company_section_name:
                 self._build_company_data_section(frame)
+                continue
+            if name == self.drafts_section_name:
+                self._build_drafts_section(frame)
                 continue
             if name == self.results_section_name:
                 self._build_results_section(frame)
@@ -821,53 +1648,136 @@ class MainApplication:
 
     def _build_company_data_section(self, frame: ttk.Frame):
         """Sección Parte 3 con los campos adicionales para datos de la empresa."""
+        for child in frame.winfo_children():
+            child.destroy()
 
-        ttk.Label(frame, text=self.company_section_name, style='Title.TLabel').pack(anchor=tk.W, pady=(0, 10))
-        ttk.Label(
+        header = self._create_section_header(
             frame,
-            text="Completa la información que se utilizará en la página 3 del PDF.",
-            style='Subtitle.TLabel'
-        ).pack(anchor=tk.W)
+            self.company_section_name,
+            "Completa la informacion que se utilizara en la pagina 3 del PDF.",
+        )
+        header.pack(anchor=tk.W, pady=(0, 16), fill=tk.X)
 
-        ttk.Separator(frame, orient='horizontal').pack(fill=tk.X, pady=10)
+        card, card_body = self._create_card(frame)
+        card.pack(fill=tk.X, pady=4)
 
-        fields_frame = ttk.Frame(frame)
-        fields_frame.pack(fill=tk.X, pady=5)
+        fields_frame = ctk.CTkFrame(card_body, fg_color="transparent", corner_radius=0)
+        fields_frame.pack(fill=tk.X)
+        fields_frame.grid_columnconfigure(1, weight=1)
 
         field_specs = [
             ("Planta evaluada:", self.plant_var, "entry"),
             ("Actividad principal:", self.activity_var, "entry"),
-            ("Contraparte técnica por la empresa:", self.company_counterpart_var, "entry"),
-            ("Cargo del personal encargado:", self.counterpart_role_var, "entry"),
             ("País en que se realizó:", self.country_var, "entry"),
             ("Fechas del estudio:", self.study_dates_var, "date"),
         ]
 
         for idx, (label_text, var, field_type) in enumerate(field_specs):
-            ttk.Label(fields_frame, text=label_text, style='Subtitle.TLabel').grid(
-                row=idx, column=0, sticky=tk.W, pady=6
-            )
+            self._create_pill_label(fields_frame, label_text).grid(row=idx, column=0, sticky=tk.W, pady=8)
             if field_type == "date":
-                widget = self._create_date_entry(fields_frame, var, width=18)
-                widget.grid(row=idx, column=1, sticky=tk.W, padx=10, pady=6)
+                date_wrapper = ctk.CTkFrame(
+                    fields_frame,
+                    fg_color=self.colors["field_bg"],
+                    corner_radius=10,
+                    border_width=1,
+                    border_color=self.colors["field_border"],
+                )
+                date_wrapper.grid(row=idx, column=1, sticky=tk.W, padx=12, pady=8)
+                widget = self._create_date_entry(date_wrapper, var, width=18)
+                widget.pack(padx=8, pady=6)
             else:
-                ttk.Entry(fields_frame, textvariable=var, width=50).grid(
-                    row=idx, column=1, sticky=tk.EW, padx=10, pady=6
+                self._create_text_entry(fields_frame, var, width=340).grid(
+                    row=idx, column=1, sticky=tk.EW, padx=12, pady=8
                 )
 
-        fields_frame.columnconfigure(1, weight=1)
+    def _build_drafts_section(self, frame: ttk.Frame):
+        """Seccion para listar y cargar borradores guardados."""
+
+        for child in frame.winfo_children():
+            child.destroy()
+
+        header = self._create_section_header(
+            frame,
+            "Borradores guardados",
+            "Administra los borradores guardados para continuar un informe.",
+        )
+        header.pack(anchor=tk.W, pady=(0, 16), fill=tk.X)
+
+        action_row = ctk.CTkFrame(frame, fg_color="transparent", corner_radius=0)
+        action_row.pack(fill=tk.X, pady=(0, 8))
+        ctk.CTkButton(
+            action_row,
+            text="Actualizar lista",
+            fg_color=self.colors["primary_muted"],
+            text_color=self.colors["primary"],
+            hover_color="#D4EDDA",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
+            command=self._refresh_drafts_table,
+        ).pack(side=tk.LEFT, padx=4)
+        ctk.CTkButton(
+            action_row,
+            text="Cargar seleccionado",
+            fg_color=self.colors["primary"],
+            text_color=self.colors["surface"],
+            hover_color=self.colors["primary_dark"],
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
+            command=self._load_selected_draft,
+        ).pack(side=tk.LEFT, padx=4)
+        ctk.CTkButton(
+            action_row,
+            text="Eliminar seleccionado",
+            fg_color="transparent",
+            text_color=self.colors["primary"],
+            border_width=1,
+            border_color=self.colors["primary"],
+            hover_color=self.colors["primary_muted"],
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
+            command=self._delete_selected_draft,
+        ).pack(side=tk.LEFT, padx=4)
+
+        tree_frame = ctk.CTkFrame(frame, fg_color="transparent", corner_radius=0)
+        tree_frame.pack(fill=tk.BOTH, expand=True)
+        columns = ("name", "date")
+        tree = ttk.Treeview(tree_frame, columns=columns, show="headings", height=12)
+        scrollbar = ctk.CTkScrollbar(
+            tree_frame,
+            orientation="vertical",
+            command=tree.yview,
+            width=12,
+            corner_radius=999,
+            fg_color=self.colors["border"],
+            button_color=self.colors["primary"],
+            button_hover_color=self.colors["primary_dark"],
+        )
+        tree.configure(yscrollcommand=scrollbar.set)
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(6, 0))
+
+        tree.heading("name", text="Archivo")
+        tree.heading("date", text="Modificado")
+        tree.column("name", width=420, anchor=tk.W)
+        tree.column("date", width=180, anchor=tk.CENTER)
+
+        self.drafts_tree = tree
+        self._refresh_drafts_table()
 
     def _build_results_section(self, frame: ttk.Frame):
         """Sección de resultados con bloques dinámicos por tipo de prueba."""
+        for child in frame.winfo_children():
+            child.destroy()
 
-        ttk.Label(frame, text=self.results_section_name, style='Title.TLabel').pack(anchor=tk.W, pady=(0, 8))
-        ttk.Label(
+        header = self._create_section_header(
             frame,
-            text="Registra a los colaboradores evaluados para generar los cuadros oficiales por tipo de prueba.",
-            style='Subtitle.TLabel'
-        ).pack(anchor=tk.W)
-
-        ttk.Separator(frame, orient='horizontal').pack(fill=tk.X, pady=10)
+            self.results_section_name,
+            "Registra a los colaboradores evaluados para generar los cuadros oficiales por tipo de prueba.",
+        )
+        header.pack(anchor=tk.W, pady=(0, 16), fill=tk.X)
 
         self._setup_scrollable_results_container(frame)
         self._render_result_blocks()
@@ -875,17 +1785,15 @@ class MainApplication:
     def _setup_scrollable_results_container(self, parent: ttk.Frame):
         """Crea un contenedor desplazable para los bloques de resultados."""
 
-        container = ttk.Frame(parent)
+        container = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
         container.pack(fill=tk.BOTH, expand=True)
 
-        canvas = tk.Canvas(container, highlightthickness=0)
+        canvas = tk.Canvas(container, highlightthickness=0, bg=self.colors["bg"])
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        scrollbar = ttk.Scrollbar(container, orient=tk.VERTICAL, command=canvas.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.configure(yscrollcommand=None)
 
-        inner_frame = ttk.Frame(canvas)
+        inner_frame = ctk.CTkFrame(canvas, fg_color="transparent", corner_radius=0)
         window_id = canvas.create_window((0, 0), window=inner_frame, anchor="nw")
 
         def _update_scroll_region(_event):
@@ -900,6 +1808,43 @@ class MainApplication:
 
         self.results_canvas = canvas
         self.results_section_container = inner_frame
+
+    def _create_scrollable_section(self, parent: ctk.CTkFrame) -> ctk.CTkFrame:
+        """Crea un contenedor desplazable para una sección."""
+
+        container = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
+        container.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        canvas = tk.Canvas(container, highlightthickness=0, bg=self.colors["surface"])
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        scrollbar = ctk.CTkScrollbar(
+            container,
+            orientation="vertical",
+            command=canvas.yview,
+            width=12,
+            corner_radius=999,
+            fg_color=self.colors["border"],
+            button_color=self.colors["primary"],
+            button_hover_color=self.colors["primary_dark"],
+        )
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(6, 0))
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        inner_frame = ctk.CTkFrame(canvas, fg_color="transparent", corner_radius=0)
+        window_id = canvas.create_window((0, 0), window=inner_frame, anchor="nw")
+
+        def _update_scroll_region(_event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _resize_inner(event):
+            canvas.itemconfig(window_id, width=event.width)
+
+        inner_frame.bind("<Configure>", _update_scroll_region)
+        canvas.bind("<Configure>", _resize_inner)
+        self._bind_mousewheel(canvas)
+
+        return inner_frame
 
     def _bind_mousewheel(self, canvas: tk.Canvas):
         """Activa el desplazamiento con la rueda del ratón dentro del canvas."""
@@ -971,11 +1916,12 @@ class MainApplication:
         result_values = list(palette.keys())
         default_result = result_values[0] if result_values else ""
 
-        block_frame = ttk.Frame(parent)
-        block_frame.pack(fill=tk.BOTH, expand=True, pady=8)
+        block_card, block_body = self._create_card(parent, padding=12)
+        block_card.pack(fill=tk.BOTH, expand=True, pady=10)
 
-        ttk.Label(block_frame, text=scheme["title"], style='Title.TLabel').pack(anchor=tk.W)
-        ttk.Separator(block_frame, orient='horizontal').pack(fill=tk.X, pady=6)
+        title_row = ctk.CTkFrame(block_body, fg_color="transparent", corner_radius=0)
+        title_row.pack(fill=tk.X, pady=(0, 8))
+        self._create_pill_label(title_row, scheme["title"]).pack(anchor=tk.W)
 
         form_vars = {
             "name": tk.StringVar(),
@@ -985,83 +1931,118 @@ class MainApplication:
             "result": tk.StringVar(value=default_result),
         }
 
-        form = ttk.Frame(block_frame)
-        form.pack(fill=tk.X, pady=5)
+        form = ctk.CTkFrame(block_body, fg_color="transparent", corner_radius=0)
+        form.pack(fill=tk.X)
+        form.grid_columnconfigure(1, weight=1)
+        form.grid_columnconfigure(3, weight=1)
 
-        ttk.Label(form, text="Nombre completo:", style='Subtitle.TLabel').grid(row=0, column=0, sticky=tk.W, pady=6)
-        ttk.Entry(form, textvariable=form_vars["name"], width=35).grid(
-            row=0, column=1, sticky=tk.EW, padx=8, pady=6
+        self._create_pill_label(form, "Nombre completo").grid(row=0, column=0, sticky=tk.NW, pady=6)
+        name_container, name_entry, name_error = self._create_validated_entry(
+            form, form_vars["name"], width=280
         )
+        name_container.grid(row=0, column=1, sticky="nsew", padx=12, pady=6)
+        name_validator = self._attach_required_validation(form_vars["name"], name_entry, name_error, "Requerido")
 
-        ttk.Label(form, text="Cédula:", style='Subtitle.TLabel').grid(row=0, column=2, sticky=tk.W, pady=6)
-        ttk.Entry(form, textvariable=form_vars["identification"], width=25).grid(
-            row=0, column=3, sticky=tk.EW, padx=8, pady=6
+        self._create_pill_label(form, "Cédula").grid(row=0, column=2, sticky=tk.NW, pady=6)
+        id_container, id_entry, id_error = self._create_validated_entry(
+            form, form_vars["identification"], width=220
         )
+        id_container.grid(row=0, column=3, sticky="nsew", padx=12, pady=6)
+        id_validator = self._attach_id_validation(form_vars["identification"], id_entry, id_error)
 
-        ttk.Label(form, text="Edad:", style='Subtitle.TLabel').grid(row=1, column=0, sticky=tk.W, pady=6)
-        age_entry = ttk.Entry(form, textvariable=form_vars["age"], width=10)
-        age_entry.grid(row=1, column=1, sticky=tk.W, padx=8, pady=6)
+        self._create_pill_label(form, "Edad").grid(row=1, column=0, sticky=tk.NW, pady=6)
+        age_container, age_entry, age_error = self._create_validated_entry(
+            form, form_vars["age"], width=120
+        )
+        age_container.grid(row=1, column=1, sticky=tk.NW, padx=12, pady=6)
         age_entry.configure(validate="key", validatecommand=(self.numeric_validation_cmd, "%P"))
+        age_validator = self._attach_numeric_validation(form_vars["age"], age_entry, age_error, "Solo numeros")
 
-        ttk.Label(form, text="Cargo:", style='Subtitle.TLabel').grid(row=1, column=2, sticky=tk.W, pady=6)
-        ttk.Entry(form, textvariable=form_vars["position"], width=30).grid(
-            row=1, column=3, sticky=tk.EW, padx=8, pady=6
+        self._create_pill_label(form, "Cargo").grid(row=1, column=2, sticky=tk.NW, pady=6)
+        position_container, position_entry, position_error = self._create_validated_entry(
+            form, form_vars["position"], width=220
+        )
+        position_container.grid(row=1, column=3, sticky="nsew", padx=12, pady=6)
+        position_validator = self._attach_required_validation(
+            form_vars["position"], position_entry, position_error, "Requerido"
         )
 
-        ttk.Label(form, text="Resultado:", style='Subtitle.TLabel').grid(row=2, column=0, sticky=tk.W, pady=6)
-        result_combo = ttk.Combobox(
+        self._create_pill_label(form, "Resultado").grid(row=2, column=0, sticky=tk.NW, pady=6)
+        result_container, result_combo, result_error = self._create_validated_combo(
             form,
-            textvariable=form_vars["result"],
-            values=result_values,
-            state='readonly',
-            width=32,
+            form_vars["result"],
+            result_values,
+            command=lambda _value=None, key=dataset_key: self._update_result_preview(key),
+            width=240,
         )
-        result_combo.grid(row=2, column=1, sticky=tk.W, padx=8, pady=6)
-        result_combo.bind(
-            "<<ComboboxSelected>>",
-            lambda *_args, key=dataset_key: self._update_result_preview(key),
+        result_container.grid(row=2, column=1, sticky=tk.NW, padx=12, pady=6)
+        result_validator = self._attach_required_validation(
+            form_vars["result"], result_combo, result_error, "Requerido"
         )
 
-        preview_container = ttk.Frame(form)
-        preview_container.grid(row=2, column=2, columnspan=2, sticky=tk.W, padx=8, pady=6)
-        ttk.Label(preview_container, text="Color del resultado:", style='Subtitle.TLabel').pack(anchor=tk.W)
-        preview_label = tk.Label(
+        preview_container = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
+        preview_container.grid(row=2, column=2, columnspan=2, sticky=tk.NW, padx=12, pady=6)
+        ctk.CTkLabel(
+            preview_container,
+            text="Color del resultado",
+            font=ctk.CTkFont("Segoe UI", 10),
+            text_color=self.colors["text_muted"],
+        ).pack(anchor=tk.W)
+        preview_label = ctk.CTkLabel(
             preview_container,
             text="",
-            font=("Arial", 10, "bold"),
-            width=28,
-            relief=tk.GROOVE,
-            padx=6,
-            pady=4,
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=999,
+            height=28,
+            fg_color=self.colors["field_bg"],
+            text_color=self.colors["text"],
+            padx=12,
         )
-        preview_label.pack(anchor=tk.W, pady=(2, 0))
+        preview_label.pack(anchor=tk.W, pady=(4, 0))
 
         form.columnconfigure(1, weight=1)
         form.columnconfigure(3, weight=1)
 
-        button_frame = ttk.Frame(block_frame)
-        button_frame.pack(fill=tk.X, pady=5)
-        ttk.Button(
+        button_frame = ctk.CTkFrame(block_body, fg_color="transparent", corner_radius=0)
+        button_frame.pack(fill=tk.X, pady=(8, 4))
+        ctk.CTkButton(
             button_frame,
             text="Agregar resultado",
-            style='Action.TButton',
+            fg_color=self.colors["primary"],
+            text_color=self.colors["surface"],
+            hover_color=self.colors["primary_dark"],
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
             command=lambda key=dataset_key: self._add_result_entry(key),
         ).pack(side=tk.LEFT, padx=4)
-        ttk.Button(
+        ctk.CTkButton(
             button_frame,
             text="Eliminar seleccionado",
-            style='Action.TButton',
+            fg_color=self.colors["primary_muted"],
+            text_color=self.colors["primary"],
+            hover_color="#D4EDDA",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
             command=lambda key=dataset_key: self._remove_selected_entry(key),
         ).pack(side=tk.LEFT, padx=4)
-        ttk.Button(
+        ctk.CTkButton(
             button_frame,
             text="Limpiar lista",
-            style='Action.TButton',
+            fg_color="transparent",
+            text_color=self.colors["primary"],
+            border_width=1,
+            border_color=self.colors["primary"],
+            hover_color=self.colors["primary_muted"],
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
             command=lambda key=dataset_key: self._clear_results_entries(key),
         ).pack(side=tk.LEFT, padx=4)
 
-        tree_frame = ttk.Frame(block_frame)
-        tree_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+        tree_frame = ctk.CTkFrame(block_body, fg_color="transparent", corner_radius=0)
+        tree_frame.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
 
         columns = ("index", "name", "identification", "age", "position", "result")
         tree = ttk.Treeview(
@@ -1071,10 +2052,19 @@ class MainApplication:
             selectmode='extended',
             height=10,
         )
-        scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=tree.yview)
+        scrollbar = ctk.CTkScrollbar(
+            tree_frame,
+            orientation="vertical",
+            command=tree.yview,
+            width=12,
+            corner_radius=999,
+            fg_color=self.colors["border"],
+            button_color=self.colors["primary"],
+            button_hover_color=self.colors["primary_dark"],
+        )
         tree.configure(yscrollcommand=scrollbar.set)
         tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(6, 0))
 
         headings = {
             "index": "N°",
@@ -1098,6 +2088,13 @@ class MainApplication:
             "form_vars": form_vars,
             "preview_label": preview_label,
             "tree": tree,
+            "validators": {
+                "name": name_validator,
+                "identification": id_validator,
+                "age": age_validator,
+                "position": position_validator,
+                "result": result_validator,
+            },
         }
         self._update_result_preview(dataset_key)
         self._configure_result_tags(dataset_key)
@@ -1105,51 +2102,92 @@ class MainApplication:
 
     def _build_calibration_section(self, frame: ttk.Frame):
         """Permite adjuntar los certificados de calibración en PDF."""
+        for child in frame.winfo_children():
+            child.destroy()
 
-        ttk.Label(frame, text=self.calibration_section_name, style='Title.TLabel').pack(anchor=tk.W, pady=(0, 8))
-        ttk.Label(
+        header = self._create_section_header(
             frame,
-            text="Carga los certificados en formato PDF para insertarlos directamente en el informe.",
-            style='Subtitle.TLabel',
-        ).pack(anchor=tk.W)
+            self.calibration_section_name,
+            "Carga los certificados en formato PDF para insertarlos directamente en el informe.",
+        )
+        header.pack(anchor=tk.W, pady=(0, 16), fill=tk.X)
 
-        ttk.Separator(frame, orient='horizontal').pack(fill=tk.X, pady=10)
+        upload_card, upload_body = self._create_card(frame)
+        upload_card.pack(fill=tk.X, pady=(0, 12))
 
-        button_frame = ttk.Frame(frame)
-        button_frame.pack(fill=tk.X, pady=(0, 8))
-        ttk.Button(
-            button_frame,
-            text="Agregar PDF",
-            style='Action.TButton',
+        ctk.CTkLabel(
+            upload_body,
+            text="Arrastra archivos aqui o selecciona desde tu equipo",
+            font=ctk.CTkFont("Segoe UI", 11),
+            text_color=self.colors["text_muted"],
+        ).pack(anchor=tk.CENTER, pady=(8, 10))
+        ctk.CTkButton(
+            upload_body,
+            text="Seleccionar archivos",
+            fg_color=self.colors["primary"],
+            text_color=self.colors["surface"],
+            hover_color=self.colors["primary_dark"],
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=36,
             command=self._add_calibration_file,
-        ).pack(side=tk.LEFT, padx=4)
-        ttk.Button(
-            button_frame,
+        ).pack()
+
+        action_row = ctk.CTkFrame(frame, fg_color="transparent", corner_radius=0)
+        action_row.pack(fill=tk.X, pady=(0, 8))
+        ctk.CTkButton(
+            action_row,
             text="Ver seleccionado",
-            style='Action.TButton',
+            fg_color=self.colors["primary_muted"],
+            text_color=self.colors["primary"],
+            hover_color="#D4EDDA",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
             command=self._open_selected_calibration_file,
         ).pack(side=tk.LEFT, padx=4)
-        ttk.Button(
-            button_frame,
+        ctk.CTkButton(
+            action_row,
             text="Eliminar seleccionado",
-            style='Action.TButton',
+            fg_color=self.colors["primary_muted"],
+            text_color=self.colors["primary"],
+            hover_color="#D4EDDA",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
             command=self._remove_selected_calibration_file,
         ).pack(side=tk.LEFT, padx=4)
-        ttk.Button(
-            button_frame,
+        ctk.CTkButton(
+            action_row,
             text="Limpiar lista",
-            style='Action.TButton',
+            fg_color="transparent",
+            text_color=self.colors["primary"],
+            border_width=1,
+            border_color=self.colors["primary"],
+            hover_color=self.colors["primary_muted"],
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
             command=self._clear_calibration_files,
         ).pack(side=tk.LEFT, padx=4)
 
-        tree_frame = ttk.Frame(frame)
+        tree_frame = ctk.CTkFrame(frame, fg_color="transparent", corner_radius=0)
         tree_frame.pack(fill=tk.BOTH, expand=True)
         columns = ("file", "status")
         tree = ttk.Treeview(tree_frame, columns=columns, show='headings', height=10, selectmode='extended')
-        scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=tree.yview)
+        scrollbar = ctk.CTkScrollbar(
+            tree_frame,
+            orientation="vertical",
+            command=tree.yview,
+            width=12,
+            corner_radius=999,
+            fg_color=self.colors["border"],
+            button_color=self.colors["primary"],
+            button_hover_color=self.colors["primary_dark"],
+        )
         tree.configure(yscrollcommand=scrollbar.set)
         tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(6, 0))
 
         tree.heading("file", text="Archivo")
         tree.heading("status", text="Estado")
@@ -1252,15 +2290,15 @@ class MainApplication:
 
     def _build_test_attachments_section(self, frame: ttk.Frame):
         """Sección para cargar audiogramas y reportes de espirometría."""
+        for child in frame.winfo_children():
+            child.destroy()
 
-        ttk.Label(frame, text=self.report_attachments_section_name, style='Title.TLabel').pack(anchor=tk.W, pady=(0, 8))
-        ttk.Label(
+        header = self._create_section_header(
             frame,
-            text="Adjunta los archivos PDF exportados por los equipos de medición. Se incluirán como anexos del informe.",
-            style='Subtitle.TLabel',
-        ).pack(anchor=tk.W)
-
-        ttk.Separator(frame, orient='horizontal').pack(fill=tk.X, pady=10)
+            self.report_attachments_section_name,
+            "Adjunta los archivos PDF exportados por los equipos de medicion. Se incluiran como anexos del informe.",
+        )
+        header.pack(anchor=tk.W, pady=(0, 16), fill=tk.X)
 
         dataset_specs = [
             ("audiometria", "Audiogramas (PDF)", "Disponible cuando el informe incluye audiometrías."),
@@ -1268,60 +2306,101 @@ class MainApplication:
         ]
 
         for dataset_key, title, helper in dataset_specs:
-            block = ttk.LabelFrame(frame, text=title)
-            block.pack(fill=tk.BOTH, expand=True, pady=6)
+            block_card, block_body = self._create_card(frame)
+            block_card.pack(fill=tk.BOTH, expand=True, pady=8)
 
-            btn_frame = ttk.Frame(block)
-            btn_frame.pack(fill=tk.X, pady=(6, 4))
+            title_row = ctk.CTkFrame(block_body, fg_color="transparent", corner_radius=0)
+            title_row.pack(fill=tk.X, pady=(0, 10))
+            self._create_pill_label(title_row, title).pack(anchor=tk.W)
 
-            add_btn = ttk.Button(
+            btn_frame = ctk.CTkFrame(block_body, fg_color="transparent", corner_radius=0)
+            btn_frame.pack(fill=tk.X, pady=(0, 6))
+
+            add_btn = ctk.CTkButton(
                 btn_frame,
                 text="Agregar PDF",
-                style='Action.TButton',
+                fg_color=self.colors["primary"],
+                text_color=self.colors["surface"],
+                hover_color=self.colors["primary_dark"],
+                font=ctk.CTkFont("Segoe UI", 10, "bold"),
+                corner_radius=10,
+                height=34,
                 command=lambda key=dataset_key: self._add_test_attachment_file(key),
             )
             add_btn.pack(side=tk.LEFT, padx=4)
 
-            view_btn = ttk.Button(
+            view_btn = ctk.CTkButton(
                 btn_frame,
                 text="Ver seleccionado",
-                style='Action.TButton',
+                fg_color=self.colors["primary_muted"],
+                text_color=self.colors["primary"],
+                hover_color="#D4EDDA",
+                font=ctk.CTkFont("Segoe UI", 10, "bold"),
+                corner_radius=10,
+                height=34,
                 command=lambda key=dataset_key: self._open_selected_test_attachment_file(key),
             )
             view_btn.pack(side=tk.LEFT, padx=4)
 
-            remove_btn = ttk.Button(
+            remove_btn = ctk.CTkButton(
                 btn_frame,
                 text="Eliminar seleccionado",
-                style='Action.TButton',
+                fg_color=self.colors["primary_muted"],
+                text_color=self.colors["primary"],
+                hover_color="#D4EDDA",
+                font=ctk.CTkFont("Segoe UI", 10, "bold"),
+                corner_radius=10,
+                height=34,
                 command=lambda key=dataset_key: self._remove_selected_test_attachment_file(key),
             )
             remove_btn.pack(side=tk.LEFT, padx=4)
 
-            clear_btn = ttk.Button(
+            clear_btn = ctk.CTkButton(
                 btn_frame,
                 text="Limpiar lista",
-                style='Action.TButton',
+                fg_color="transparent",
+                text_color=self.colors["primary"],
+                border_width=1,
+                border_color=self.colors["primary"],
+                hover_color=self.colors["primary_muted"],
+                font=ctk.CTkFont("Segoe UI", 10, "bold"),
+                corner_radius=10,
+                height=34,
                 command=lambda key=dataset_key: self._clear_test_attachment_files(key),
             )
             clear_btn.pack(side=tk.LEFT, padx=4)
 
-            tree_frame = ttk.Frame(block)
+            tree_frame = ctk.CTkFrame(block_body, fg_color="transparent", corner_radius=0)
             tree_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
             columns = ("file", "status")
             tree = ttk.Treeview(tree_frame, columns=columns, show='headings', height=6, selectmode='extended')
-            scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=tree.yview)
+            scrollbar = ctk.CTkScrollbar(
+                tree_frame,
+                orientation="vertical",
+                command=tree.yview,
+                width=12,
+                corner_radius=999,
+                fg_color=self.colors["border"],
+                button_color=self.colors["primary"],
+                button_hover_color=self.colors["primary_dark"],
+            )
             tree.configure(yscrollcommand=scrollbar.set)
             tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(6, 0))
 
             tree.heading("file", text="Archivo")
             tree.heading("status", text="Estado")
             tree.column("file", width=320, anchor=tk.W)
             tree.column("status", width=140, anchor=tk.CENTER)
 
-            status_label = ttk.Label(block, text=helper, style='Subtitle.TLabel')
-            status_label.pack(anchor=tk.W, padx=4, pady=(0, 6))
+            status_label = ctk.CTkLabel(
+                block_body,
+                text=helper,
+                font=ctk.CTkFont("Segoe UI", 10),
+                text_color=self.colors["text_muted"],
+                anchor="w",
+            )
+            status_label.pack(anchor=tk.W, padx=4, pady=(4, 0))
 
             self.test_attachment_trees[dataset_key] = tree
             self.test_attachment_buttons[dataset_key] = {
@@ -1433,59 +2512,104 @@ class MainApplication:
 
     def _build_attendance_section(self, frame: ttk.Frame):
         """Permite cargar los listados de asistencia firmados en PDF."""
+        for child in frame.winfo_children():
+            child.destroy()
 
-        ttk.Label(frame, text=self.attendance_section_name, style='Title.TLabel').pack(anchor=tk.W, pady=(0, 8))
-        ttk.Label(
+        header = self._create_section_header(
             frame,
-            text="Adjunta los listados oficiales de asistencia para integrarlos en el informe.",
-            style='Subtitle.TLabel',
-        ).pack(anchor=tk.W)
+            self.attendance_section_name,
+            "Adjunta los listados oficiales de asistencia para integrarlos en el informe.",
+        )
+        header.pack(anchor=tk.W, pady=(0, 16), fill=tk.X)
 
-        button_frame = ttk.Frame(frame)
-        button_frame.pack(fill=tk.X, pady=6)
-        ttk.Button(
-            button_frame,
-            text="Agregar PDF",
-            style='Action.TButton',
+        upload_card, upload_body = self._create_card(frame)
+        upload_card.pack(fill=tk.X, pady=(0, 12))
+
+        ctk.CTkLabel(
+            upload_body,
+            text="Arrastra archivos aqui o selecciona desde tu equipo",
+            font=ctk.CTkFont("Segoe UI", 11),
+            text_color=self.colors["text_muted"],
+        ).pack(anchor=tk.CENTER, pady=(8, 10))
+        ctk.CTkButton(
+            upload_body,
+            text="Seleccionar archivos",
+            fg_color=self.colors["primary"],
+            text_color=self.colors["surface"],
+            hover_color=self.colors["primary_dark"],
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=36,
             command=self._add_attendance_file,
-        ).pack(side=tk.LEFT, padx=4)
-        ttk.Button(
+        ).pack()
+
+        button_frame = ctk.CTkFrame(frame, fg_color="transparent", corner_radius=0)
+        button_frame.pack(fill=tk.X, pady=6)
+        ctk.CTkButton(
             button_frame,
             text="Ver seleccionado",
-            style='Action.TButton',
+            fg_color=self.colors["primary_muted"],
+            text_color=self.colors["primary"],
+            hover_color="#D4EDDA",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
             command=self._open_selected_attendance_file,
         ).pack(side=tk.LEFT, padx=4)
-        ttk.Button(
+        ctk.CTkButton(
             button_frame,
             text="Eliminar seleccionado",
-            style='Action.TButton',
+            fg_color=self.colors["primary_muted"],
+            text_color=self.colors["primary"],
+            hover_color="#D4EDDA",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
             command=self._remove_selected_attendance_file,
         ).pack(side=tk.LEFT, padx=4)
-        ttk.Button(
+        ctk.CTkButton(
             button_frame,
             text="Limpiar lista",
-            style='Action.TButton',
+            fg_color="transparent",
+            text_color=self.colors["primary"],
+            border_width=1,
+            border_color=self.colors["primary"],
+            hover_color=self.colors["primary_muted"],
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
             command=self._clear_attendance_files,
         ).pack(side=tk.LEFT, padx=4)
 
-        tree_frame = ttk.Frame(frame)
+        tree_frame = ctk.CTkFrame(frame, fg_color="transparent", corner_radius=0)
         tree_frame.pack(fill=tk.BOTH, expand=True)
         columns = ("file", "status")
         tree = ttk.Treeview(tree_frame, columns=columns, show='headings', height=6, selectmode='extended')
-        scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=tree.yview)
+        scrollbar = ctk.CTkScrollbar(
+            tree_frame,
+            orientation="vertical",
+            command=tree.yview,
+            width=12,
+            corner_radius=999,
+            fg_color=self.colors["border"],
+            button_color=self.colors["primary"],
+            button_hover_color=self.colors["primary_dark"],
+        )
         tree.configure(yscrollcommand=scrollbar.set)
         tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(6, 0))
 
         tree.heading("file", text="Archivo")
         tree.heading("status", text="Estado")
         tree.column("file", width=360, anchor=tk.W)
         tree.column("status", width=140, anchor=tk.CENTER)
 
-        self.attendance_status_label = ttk.Label(
+        self.attendance_status_label = ctk.CTkLabel(
             frame,
-            text="Los listados se insertarán inmediatamente después de los resultados.",
-            style='Subtitle.TLabel',
+            text="Los listados se insertaran inmediatamente despues de los resultados.",
+            font=ctk.CTkFont("Segoe UI", 10),
+            text_color=self.colors["text_muted"],
+            anchor="w",
         )
         self.attendance_status_label.pack(anchor=tk.W, pady=(6, 0))
 
@@ -1613,82 +2737,92 @@ class MainApplication:
             if enabled:
                 status_label.configure(
                     text="Carga los PDF proporcionados por el equipo para incluirlos como anexos.",
-                    foreground="#2E7D32",
+                    text_color="#2E7D32",
                 )
             else:
                 dataset_name = self.test_dataset_labels.get(dataset_key, "este estudio")
                 status_label.configure(
                     text=f"Disponible solo cuando se selecciona {dataset_name} en la presentación.",
-                    foreground="#757575",
+                    text_color="#757575",
                 )
 
     def _build_recommendations_section(self, frame: ttk.Frame):
         """Sección editable para las recomendaciones del informe."""
+        for child in frame.winfo_children():
+            child.destroy()
 
-        ttk.Label(frame, text=self.recommendations_section_name, style='Title.TLabel').pack(anchor=tk.W, pady=(0, 8))
-        ttk.Label(
+        header = self._create_section_header(
             frame,
-            text="Puedes mantener estas recomendaciones base o ajustarlas según los hallazgos del informe.",
-            style='Subtitle.TLabel',
-        ).pack(anchor=tk.W)
+            self.recommendations_section_name,
+            "Puedes mantener estas recomendaciones base o ajustarlas segun los hallazgos del informe.",
+        )
+        header.pack(anchor=tk.W, pady=(0, 16), fill=tk.X)
 
-        ttk.Separator(frame, orient='horizontal').pack(fill=tk.X, pady=10)
-
-        container = ttk.Frame(frame)
-        container.pack(fill=tk.BOTH, expand=True)
+        card, card_body = self._create_card(frame)
+        card.pack(fill=tk.BOTH, expand=True)
 
         self.recommendations_text_widget = tk.Text(
-            container,
+            card_body,
             height=16,
             wrap=tk.WORD,
-            font=("Arial", 11),
-            padx=10,
-            pady=10,
+            font=("Segoe UI", 11),
+            padx=12,
+            pady=12,
         )
         self.recommendations_text_widget.pack(fill=tk.BOTH, expand=True)
         self._reset_recommendations_text_to_default(prompt=False)
 
-        button_frame = ttk.Frame(frame)
+        button_frame = ctk.CTkFrame(frame, fg_color="transparent", corner_radius=0)
         button_frame.pack(anchor=tk.E, pady=10)
-        ttk.Button(
+        ctk.CTkButton(
             button_frame,
             text="Regenerar texto sugerido",
-            style='Action.TButton',
+            fg_color=self.colors["primary_muted"],
+            text_color=self.colors["primary"],
+            hover_color="#D4EDDA",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
             command=self._reset_recommendations_text_to_default,
         ).pack(side=tk.RIGHT)
 
     def _build_conclusion_section(self, frame: ttk.Frame):
         """Sección Conclusión con texto editable y plantilla dinámica."""
+        for child in frame.winfo_children():
+            child.destroy()
 
-        ttk.Label(frame, text="Conclusión del informe", style='Title.TLabel').pack(anchor=tk.W, pady=(0, 8))
-        ttk.Label(
+        header = self._create_section_header(
             frame,
-            text="Puedes mantener el texto sugerido o personalizarlo según el informe.",
-            style='Subtitle.TLabel',
-        ).pack(anchor=tk.W)
+            "Conclusión del informe",
+            "Puedes mantener el texto sugerido o personalizarlo segun el informe.",
+        )
+        header.pack(anchor=tk.W, pady=(0, 16), fill=tk.X)
 
-        ttk.Separator(frame, orient='horizontal').pack(fill=tk.X, pady=10)
-
-        text_container = ttk.Frame(frame)
-        text_container.pack(fill=tk.BOTH, expand=True)
+        card, card_body = self._create_card(frame)
+        card.pack(fill=tk.BOTH, expand=True)
 
         self.conclusion_text_widget = tk.Text(
-            text_container,
+            card_body,
             height=18,
             wrap=tk.WORD,
-            font=("Arial", 11),
-            padx=10,
-            pady=10,
+            font=("Segoe UI", 11),
+            padx=12,
+            pady=12,
         )
         self.conclusion_text_widget.pack(fill=tk.BOTH, expand=True)
         self._reset_conclusion_text_to_default(prompt=False)
 
-        button_frame = ttk.Frame(frame)
+        button_frame = ctk.CTkFrame(frame, fg_color="transparent", corner_radius=0)
         button_frame.pack(anchor=tk.E, pady=10)
-        ttk.Button(
+        ctk.CTkButton(
             button_frame,
             text="Regenerar texto sugerido",
-            style='Action.TButton',
+            fg_color=self.colors["primary_muted"],
+            text_color=self.colors["primary"],
+            hover_color="#D4EDDA",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=10,
+            height=34,
             command=self._reset_conclusion_text_to_default,
         ).pack(side=tk.RIGHT)
 
@@ -1954,8 +3088,8 @@ class MainApplication:
         palette = self._get_result_palette_by_label(dataset_key, selected_label)
         preview_label.configure(
             text=palette["label"].upper(),
-            bg=palette["bg"],
-            fg=palette["fg"],
+            fg_color=palette["bg"],
+            text_color=palette["fg"],
         )
 
     def _add_result_entry(self, dataset_key: str):
@@ -1966,6 +3100,10 @@ class MainApplication:
             return
 
         form_vars = block.get("form_vars") or {}
+        validators = block.get("validators") or {}
+        for validator in validators.values():
+            if callable(validator):
+                validator()
         required_keys = ["name", "identification", "position", "result"]
         if any(key not in form_vars for key in required_keys):
             return
@@ -1977,7 +3115,9 @@ class MainApplication:
         result_label = form_vars["result"].get().strip()
 
         if not all([name, identification, position, result_label]):
-            messagebox.showwarning("Campos incompletos", "Completa nombre, cédula, cargo y resultado")
+            return
+        if not self._is_valid_panama_id(identification):
+            messagebox.showwarning("Cédula inválida", "Verifica el formato de la cédula.")
             return
 
         palette = self._get_result_palette_by_label(dataset_key, result_label)
@@ -2113,9 +3253,40 @@ class MainApplication:
 
         frame.tkraise()
         for name, button in self.section_buttons.items():
-            style_name = 'MenuActive.TButton' if name == section_name else 'Menu.TButton'
-            button.configure(style=style_name)
+            if name == section_name:
+                button.configure(
+                    fg_color=self.colors["primary"],
+                    text_color=self.colors["surface"],
+                    hover_color=self.colors["primary_dark"],
+                )
+            else:
+                button.configure(
+                    fg_color="transparent",
+                    text_color=self.colors["primary"],
+                    hover_color=self.colors["primary_muted"],
+                )
         self.active_section = section_name
+        self._update_section_progress()
+
+    def _update_section_progress(self) -> None:
+        """Actualiza la barra de progreso del menú lateral."""
+
+        if not self.section_names:
+            return
+
+        try:
+            index = self.section_names.index(self.active_section)
+        except ValueError:
+            index = 0
+
+        total = len(self.section_names)
+        progress = (index + 1) / total if total else 0
+
+        if hasattr(self, "progress_bar") and self.progress_bar is not None:
+            self.progress_bar.set(progress)
+
+        if hasattr(self, "progress_label") and self.progress_label is not None:
+            self.progress_label.configure(text=f"{index + 1} de {total} secciones")
 
     def new_report(self, silent: bool = False) -> bool:
         """Crea un nuevo informe con los datos capturados."""
@@ -2219,7 +3390,7 @@ class MainApplication:
             "attendance_files": list(attendance_files),
         }
         
-        self.status_label.config(text=f"✅ Informe creado: {self.current_report['id']} ({report_type})")
+        self.status_label.configure(text=f"✅ Informe creado: {self.current_report['id']} ({report_type})")
         if not silent:
             messagebox.showinfo(
                 "Éxito",
@@ -2468,7 +3639,7 @@ class MainApplication:
                 if result:
                     self.open_pdf(str(pdf_path))
                 
-                self.status_label.config(text=f"✅ PDF generado: {pdf_path}")
+                self.status_label.configure(text=f"✅ PDF generado: {pdf_path}")
                 return True
             else:
                 messagebox.showerror("Error", "No se pudo generar el PDF")
@@ -2478,6 +3649,240 @@ class MainApplication:
             messagebox.showerror("Error", f"Error al generar PDF: {e}")
             print(f"Error: {e}")
             return False
+
+    def _collect_report_state(self) -> dict:
+        """Construye el estado completo del formulario para guardarlo."""
+
+        return {
+            "version": 1,
+            "report_type": self.report_type_var.get(),
+            "company": self.company_var.get(),
+            "location": self.location_var.get(),
+            "date": self.date_var.get(),
+            "plant": self.plant_var.get(),
+            "activity": self.activity_var.get(),
+            "company_counterpart": self.company_counterpart_var.get(),
+            "counterpart_role": self.counterpart_role_var.get(),
+            "country": self.country_var.get(),
+            "study_dates": self.study_dates_var.get(),
+            "selected_evaluator_id": self.selected_evaluator_id.get(),
+            "evaluator_name": self.evaluator_var.get(),
+            "selected_counterpart_id": self.selected_counterpart_id.get(),
+            "counterpart_label": self.counterpart_var.get(),
+            "evaluated_entries": self.evaluated_entries,
+            "calibration_files": list(self.calibration_files),
+            "test_attachment_files": self.test_attachment_files,
+            "attendance_files": list(self.attendance_files),
+            "conclusion_text": self._get_conclusion_text(),
+            "recommendations_text": self._get_recommendations_text(),
+        }
+
+    def _apply_report_state(self, state: dict) -> None:
+        """Restaura el estado completo del formulario desde un borrador."""
+
+        self.report_type_var.set(state.get("report_type", "audiometría"))
+        self.company_var.set(state.get("company", ""))
+        self.location_var.set(state.get("location", ""))
+        self.date_var.set(state.get("date", datetime.now().strftime("%d/%m/%Y")))
+        self.plant_var.set(state.get("plant", ""))
+        self.activity_var.set(state.get("activity", ""))
+        self.company_counterpart_var.set(state.get("company_counterpart", ""))
+        self.counterpart_role_var.set(state.get("counterpart_role", ""))
+        self.country_var.set(state.get("country", ""))
+        self.study_dates_var.set(state.get("study_dates", self.date_var.get()))
+
+        self.evaluated_entries = {key: [] for key in RESULT_SCHEMES}
+        for key, entries in (state.get("evaluated_entries") or {}).items():
+            if key in self.evaluated_entries and isinstance(entries, list):
+                self.evaluated_entries[key] = entries
+
+        self.calibration_files = list(state.get("calibration_files") or [])
+        self.test_attachment_files = state.get("test_attachment_files") or {"audiometria": [], "espirometria": []}
+        self.attendance_files = list(state.get("attendance_files") or [])
+
+        self._handle_report_type_change()
+
+        evaluator_id = state.get("selected_evaluator_id")
+        if evaluator_id and evaluator_id in self.evaluator_profiles:
+            self._select_evaluator(evaluator_id, update_combo=True)
+        else:
+            selected_name = (state.get("evaluator_name") or "").strip()
+            self.evaluator_var.set(selected_name)
+            self._handle_evaluator_selection()
+
+        counterpart_id = state.get("selected_counterpart_id")
+        if counterpart_id and counterpart_id in self.counterpart_profiles:
+            self._select_counterpart(counterpart_id, update_combo=True)
+        else:
+            selected_label = (state.get("counterpart_label") or "Sin contraparte").strip()
+            self.counterpart_var.set(selected_label)
+            if self.counterpart_combo is not None:
+                self.counterpart_combo.set(selected_label)
+            self._handle_counterpart_selection()
+
+        if self.calibration_tree is not None:
+            self._refresh_calibration_table()
+        for dataset_key in list(self.test_attachment_files.keys()):
+            self._refresh_test_attachment_table(dataset_key)
+        if self.attendance_tree is not None:
+            self._refresh_attendance_table()
+
+        if self.conclusion_text_widget is not None:
+            self.conclusion_text_widget.delete("1.0", tk.END)
+            self.conclusion_text_widget.insert("1.0", state.get("conclusion_text", ""))
+        if self.recommendations_text_widget is not None:
+            self.recommendations_text_widget.delete("1.0", tk.END)
+            self.recommendations_text_widget.insert("1.0", state.get("recommendations_text", ""))
+
+        self.status_label.configure(text="Borrador cargado correctamente.")
+
+    def save_report_draft(self) -> None:
+        """Guarda un borrador en JSON para reabrirlo luego."""
+
+        drafts_dir = self.project_root / "data" / "reports"
+        drafts_dir.mkdir(parents=True, exist_ok=True)
+        default_name = f"borrador_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        target = filedialog.asksaveasfilename(
+            title="Guardar borrador",
+            defaultextension=".json",
+            initialdir=str(drafts_dir),
+            initialfile=default_name,
+            filetypes=(("JSON", "*.json"), ("Todos los archivos", "*.*")),
+        )
+        if not target:
+            return
+
+        state = self._collect_report_state()
+        try:
+            with open(target, "w", encoding="utf-8") as handler:
+                json.dump(state, handler, ensure_ascii=False, indent=2)
+            self.status_label.configure(text=f"Borrador guardado: {Path(target).name}")
+        except OSError as exc:
+            messagebox.showerror("Error", f"No se pudo guardar el borrador: {exc}")
+
+    def load_report_draft(self) -> None:
+        """Carga un borrador desde JSON y restaura el formulario."""
+
+        drafts_dir = self.project_root / "data" / "reports"
+        drafts_dir.mkdir(parents=True, exist_ok=True)
+        source = filedialog.askopenfilename(
+            title="Cargar borrador",
+            initialdir=str(drafts_dir),
+            filetypes=(("JSON", "*.json"), ("Todos los archivos", "*.*")),
+        )
+        if not source:
+            return
+
+        self._load_report_draft_from_path(source)
+
+    def _load_report_draft_from_path(self, source: str) -> None:
+        """Carga un borrador desde la ruta indicada."""
+
+        try:
+            with open(source, "r", encoding="utf-8") as handler:
+                state = json.load(handler)
+        except (OSError, json.JSONDecodeError) as exc:
+            messagebox.showerror("Error", f"No se pudo cargar el borrador: {exc}")
+            return
+
+        self._apply_report_state(state if isinstance(state, dict) else {})
+
+    def _list_draft_files(self) -> list[Path]:
+        """Devuelve los archivos JSON de borradores."""
+
+        drafts_dir = self.project_root / "data" / "reports"
+        drafts_dir.mkdir(parents=True, exist_ok=True)
+        return sorted(drafts_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+    def _purge_old_drafts(self) -> None:
+        """Elimina borradores con mas de 5 anos."""
+
+        cutoff = datetime.now().timestamp() - (365 * 5 * 24 * 60 * 60)
+        expired = []
+        for path in self._list_draft_files():
+            try:
+                if path.stat().st_mtime < cutoff:
+                    expired.append(path)
+            except OSError:
+                continue
+
+        if not expired:
+            return
+
+        confirm = messagebox.askyesno(
+            "Borradores antiguos",
+            f"Se encontraron {len(expired)} borradores con mas de 5 anos. ¿Deseas eliminarlos?",
+        )
+        if not confirm:
+            return
+
+        for path in expired:
+            try:
+                path.unlink()
+            except OSError:
+                continue
+
+    def _refresh_drafts_table(self) -> None:
+        """Refresca la tabla de borradores."""
+
+        if not self.drafts_tree:
+            return
+
+        tree = self.drafts_tree
+        for row in tree.get_children():
+            tree.delete(row)
+
+        for path in self._list_draft_files():
+            updated = datetime.fromtimestamp(path.stat().st_mtime).strftime("%d/%m/%Y %H:%M")
+            tree.insert("", tk.END, iid=str(path), values=(path.name, updated))
+
+    def _get_selected_draft_path(self) -> Path | None:
+        """Obtiene la ruta seleccionada en la tabla de borradores."""
+
+        if not self.drafts_tree:
+            return None
+
+        selected = self.drafts_tree.selection()
+        if not selected:
+            return None
+
+        try:
+            return Path(selected[0])
+        except OSError:
+            return None
+
+    def _load_selected_draft(self) -> None:
+        """Carga el borrador seleccionado en la tabla."""
+
+        draft_path = self._get_selected_draft_path()
+        if not draft_path or not draft_path.exists():
+            messagebox.showinfo("Sin seleccion", "Selecciona un borrador para cargarlo.")
+            return
+
+        self._load_report_draft_from_path(str(draft_path))
+
+    def _delete_selected_draft(self) -> None:
+        """Elimina el borrador seleccionado en la tabla."""
+
+        draft_path = self._get_selected_draft_path()
+        if not draft_path or not draft_path.exists():
+            messagebox.showinfo("Sin seleccion", "Selecciona un borrador para eliminarlo.")
+            return
+
+        confirm = messagebox.askyesno(
+            "Confirmar eliminacion",
+            f"Se eliminara el borrador '{draft_path.name}'. ¿Deseas continuar?",
+        )
+        if not confirm:
+            return
+
+        try:
+            draft_path.unlink()
+        except OSError as exc:
+            messagebox.showerror("Error", f"No se pudo eliminar el borrador: {exc}")
+            return
+
+        self._refresh_drafts_table()
     
     def _reset_form_state(self) -> None:
         """Limpia todos los campos para preparar un nuevo informe."""
@@ -2507,6 +3912,12 @@ class MainApplication:
             self.evaluator_combo.set("")
         self._update_evaluator_details_preview()
 
+        self.selected_counterpart_id.set("")
+        self.counterpart_var.set("Sin contraparte")
+        if self.counterpart_combo is not None:
+            self.counterpart_combo.set("Sin contraparte")
+        self._set_counterpart_role_state(False)
+
         self.calibration_files = []
         self._refresh_calibration_table()
 
@@ -2525,7 +3936,7 @@ class MainApplication:
         self._reset_recommendations_text_to_default(prompt=False)
         self._reset_conclusion_text_to_default(prompt=False)
 
-        self.status_label.config(text="Formulario limpio. Listo para crear un nuevo informe.")
+        self.status_label.configure(text="Formulario limpio. Listo para crear un nuevo informe.")
     
     def open_pdf(self, pdf_path: str):
         """Abre el PDF en el lector predeterminado del sistema"""
@@ -2622,7 +4033,7 @@ class MainApplication:
         if result:
             self.open_folder(str(target_root))
 
-        self.status_label.config(text=f"✅ ZIP exportado: {zip_path}")
+        self.status_label.configure(text=f"✅ ZIP exportado: {zip_path}")
         self._reset_form_state()
     
     def open_folder(self, folder_path: str):
