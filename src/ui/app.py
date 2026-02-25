@@ -127,10 +127,18 @@ class MainApplication:
         # Ruta base del proyecto
         self.project_root = Path(__file__).parent.parent.parent
 
-        # Ruta del logo de la aplicación
-        primary_logo = self.project_root / "logo-apli-removebg-preview.ico"
-        fallback_logo = Path(__file__).parent.parent / "assets" / "logo_cait.png"
-        self.app_logo_path = primary_logo if primary_logo.exists() else fallback_logo
+        # Rutas de icono/logo de la aplicación
+        runtime_base = Path(getattr(sys, "_MEIPASS", self.project_root))
+        self.app_icon_path = runtime_base / "logo-apli-removebg-preview.ico"
+        if not self.app_icon_path.exists():
+            self.app_icon_path = self.project_root / "logo-apli-removebg-preview.ico"
+        self.app_logo_path = Path(__file__).parent.parent / "assets" / "logo_cait.png"
+        self.header_logo_path = self.app_icon_path if self.app_icon_path.exists() else self.app_logo_path
+        if self.app_icon_path.exists():
+            try:
+                self.root.iconbitmap(default=str(self.app_icon_path))
+            except Exception:
+                pass
         
         self.setup_styles()
         self.setup_ui()
@@ -586,15 +594,15 @@ class MainApplication:
         header_content.pack(pady=16, padx=20, fill=tk.X)
 
         try:
-            if self.app_logo_path.exists():
-                img = Image.open(self.app_logo_path)
+            if self.header_logo_path.exists():
+                img = Image.open(self.header_logo_path).convert("RGBA")
                 logo_size = (56, 56)
-                self.logo_image = ctk.CTkImage(light_image=img, size=logo_size)
+                self.logo_image = ctk.CTkImage(light_image=img, dark_image=img, size=logo_size)
                 logo_label = ctk.CTkLabel(
                     header_content,
                     image=self.logo_image,
                     text="",
-                    fg_color=primary,
+                    fg_color="transparent",
                 )
                 logo_label.pack(side=tk.LEFT, padx=(0, 12))
         except Exception as e:
@@ -871,7 +879,6 @@ class MainApplication:
         form = ctk.CTkFrame(card_body, fg_color="transparent", corner_radius=0)
         form.pack(fill=tk.X)
         form.grid_columnconfigure(1, weight=1)
-        form.grid_columnconfigure(3, weight=1)
 
         self._create_pill_label(form, "Tipo de informe *").grid(row=0, column=0, sticky=tk.NW, pady=8)
         type_combo = self._create_combo(
@@ -897,7 +904,7 @@ class MainApplication:
         location_container.grid(row=2, column=1, sticky="nsew", padx=12, pady=8)
         self._attach_required_validation(self.location_var, location_entry, location_error, "Requerido")
 
-        self._create_pill_label(form, "Evaluador / Responsable *").grid(row=3, column=0, sticky=tk.NW, pady=8)
+        self._create_pill_label(form, "Evaluador / Responsable *").grid(row=3, column=0, sticky=tk.W, pady=8)
         self.evaluator_combo = self._create_combo(
             form,
             self.evaluator_var,
@@ -908,7 +915,7 @@ class MainApplication:
         self.evaluator_combo.grid(row=3, column=1, sticky="nsew", padx=12, pady=8)
 
         evaluator_actions = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
-        evaluator_actions.grid(row=3, column=2, rowspan=2, sticky=tk.NW, padx=6, pady=8)
+        evaluator_actions.grid(row=3, column=2, sticky=tk.W, padx=6, pady=8)
         ctk.CTkButton(
             evaluator_actions,
             text="Agregar",
@@ -943,7 +950,7 @@ class MainApplication:
         )
         self.evaluator_detail_label.grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=12, pady=(0, 6))
 
-        self._create_pill_label(form, "Contraparte tecnica").grid(row=5, column=0, sticky=tk.NW, pady=8)
+        self._create_pill_label(form, "Contraparte tecnica").grid(row=5, column=0, sticky=tk.W, pady=8)
         self.counterpart_combo = self._create_combo(
             form,
             self.counterpart_var,
@@ -954,7 +961,7 @@ class MainApplication:
         self.counterpart_combo.grid(row=5, column=1, sticky="nsew", padx=12, pady=8)
 
         counterpart_actions = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
-        counterpart_actions.grid(row=5, column=2, rowspan=2, sticky=tk.NW, padx=6, pady=8)
+        counterpart_actions.grid(row=5, column=2, sticky=tk.W, padx=6, pady=8)
         ctk.CTkButton(
             counterpart_actions,
             text="Agregar",
@@ -980,13 +987,13 @@ class MainApplication:
             command=self._remove_selected_counterpart,
         ).pack(side=tk.LEFT)
 
-        self._create_pill_label(form, "Cargo contraparte").grid(row=6, column=0, sticky=tk.NW, pady=8)
+        self._create_pill_label(form, "Cargo contraparte").grid(row=6, column=0, sticky=tk.W, pady=8)
         counterpart_role_container, self.counterpart_role_entry, _counterpart_role_error = (
             self._create_validated_entry(form, self.counterpart_role_var, width=280)
         )
         counterpart_role_container.grid(row=6, column=1, sticky="nsew", padx=12, pady=8)
 
-        self._create_pill_label(form, "Fecha de evaluación *").grid(row=7, column=0, sticky=tk.NW, pady=8)
+        self._create_pill_label(form, "Fecha de evaluación *").grid(row=7, column=0, sticky=tk.W, pady=8)
         date_container = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
         date_container.grid(row=7, column=1, sticky="nsew", padx=12, pady=8)
         date_wrapper = ctk.CTkFrame(
@@ -999,8 +1006,8 @@ class MainApplication:
         date_wrapper.configure(width=280, height=36)
         date_wrapper.pack_propagate(False)
         date_wrapper.pack(anchor=tk.W, fill=tk.X)
-        date_entry = self._create_date_entry(date_wrapper, self.date_var, width=18)
-        date_entry.pack(fill=tk.X, expand=True, padx=8, pady=6)
+        date_entry = self._create_date_entry(date_wrapper, self.date_var, width=32)
+        date_entry.pack(fill=tk.BOTH, expand=True, padx=8, pady=6)
         date_error = ctk.CTkLabel(
             date_container,
             text="",
@@ -3762,19 +3769,27 @@ class MainApplication:
             messagebox.showerror("Error", f"No se pudo guardar el borrador: {exc}")
 
     def load_report_draft(self) -> None:
-        """Carga un borrador desde JSON y restaura el formulario."""
+        """Abre la pantalla interna de borradores para seleccionar cuál cargar."""
 
-        drafts_dir = self.project_root / "data" / "reports"
-        drafts_dir.mkdir(parents=True, exist_ok=True)
-        source = filedialog.askopenfilename(
-            title="Cargar borrador",
-            initialdir=str(drafts_dir),
-            filetypes=(("JSON", "*.json"), ("Todos los archivos", "*.*")),
-        )
-        if not source:
+        draft_files = self._list_draft_files()
+        if not draft_files:
+            messagebox.showinfo(
+                "Sin borradores",
+                "No hay borradores guardados en la carpeta interna de la aplicación.",
+            )
             return
 
-        self._load_report_draft_from_path(source)
+        self.show_section(self.drafts_section_name)
+        self._refresh_drafts_table()
+
+        if self.drafts_tree is not None:
+            first = self.drafts_tree.get_children()
+            if first:
+                self.drafts_tree.selection_set(first[0])
+                self.drafts_tree.focus(first[0])
+                self.drafts_tree.see(first[0])
+
+        self.status_label.configure(text="Selecciona un borrador de la tabla y pulsa 'Cargar seleccionado'.")
 
     def _load_report_draft_from_path(self, source: str) -> None:
         """Carga un borrador desde la ruta indicada."""
