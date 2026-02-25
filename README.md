@@ -69,7 +69,7 @@ python main.py
 
 Puedes descargar la aplicación lista para usar en el ZIP del release:
 
-- https://github.com/AngelBroce/Generador-de-Informes-Cait/releases/tag/v1.0.1
+- https://github.com/AngelBroce/Generador-de-Informes-Cait/releases/download/v1.0.1/CAIT_Informes.zip
 
 ### Flujo de trabajo
 1. **Crear informe**: Selecciona tipo, completa empresa, ubicación y evaluador
