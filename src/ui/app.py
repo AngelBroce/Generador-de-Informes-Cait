@@ -873,7 +873,7 @@ class MainApplication:
         form.grid_columnconfigure(1, weight=1)
         form.grid_columnconfigure(3, weight=1)
 
-        self._create_pill_label(form, "Tipo de informe *").grid(row=0, column=0, sticky=tk.W, pady=8)
+        self._create_pill_label(form, "Tipo de informe *").grid(row=0, column=0, sticky=tk.NW, pady=8)
         type_combo = self._create_combo(
             form,
             self.report_type_var,
@@ -881,32 +881,31 @@ class MainApplication:
             command=lambda _value=None: self._handle_report_type_change(),
             width=280,
         )
-        type_combo.grid(row=0, column=1, sticky=tk.EW, padx=12, pady=8)
+        type_combo.grid(row=0, column=1, sticky="nsew", padx=12, pady=8)
 
-        self._create_pill_label(form, "Empresa *").grid(row=1, column=0, sticky=tk.W, pady=8)
+        self._create_pill_label(form, "Empresa *").grid(row=1, column=0, sticky=tk.NW, pady=8)
         company_container, company_entry, company_error = self._create_validated_entry(
             form, self.company_var, width=280
         )
-        company_container.grid(row=1, column=1, sticky=tk.EW, padx=12, pady=8)
+        company_container.grid(row=1, column=1, sticky="nsew", padx=12, pady=8)
         self._attach_required_validation(self.company_var, company_entry, company_error, "Requerido")
 
-        self._create_pill_label(form, "Ubicación / Sede *").grid(row=2, column=0, sticky=tk.W, pady=8)
+        self._create_pill_label(form, "Ubicación / Sede *").grid(row=2, column=0, sticky=tk.NW, pady=8)
         location_container, location_entry, location_error = self._create_validated_entry(
             form, self.location_var, width=280
         )
-        location_container.grid(row=2, column=1, sticky=tk.EW, padx=12, pady=8)
+        location_container.grid(row=2, column=1, sticky="nsew", padx=12, pady=8)
         self._attach_required_validation(self.location_var, location_entry, location_error, "Requerido")
 
-        self._create_pill_label(form, "Evaluador / Responsable *").grid(row=3, column=0, sticky=tk.W, pady=8)
-        evaluator_container, self.evaluator_combo, evaluator_error = self._create_validated_combo(
+        self._create_pill_label(form, "Evaluador / Responsable *").grid(row=3, column=0, sticky=tk.NW, pady=8)
+        self.evaluator_combo = self._create_combo(
             form,
             self.evaluator_var,
             [],
             command=lambda _value=None: self._handle_evaluator_selection(),
             width=280,
         )
-        evaluator_container.grid(row=3, column=1, sticky=tk.EW, padx=12, pady=8)
-        self._attach_required_validation(self.evaluator_var, self.evaluator_combo, evaluator_error, "Requerido")
+        self.evaluator_combo.grid(row=3, column=1, sticky="nsew", padx=12, pady=8)
 
         evaluator_actions = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
         evaluator_actions.grid(row=3, column=2, rowspan=2, sticky=tk.NW, padx=6, pady=8)
@@ -944,15 +943,15 @@ class MainApplication:
         )
         self.evaluator_detail_label.grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=12, pady=(0, 6))
 
-        self._create_pill_label(form, "Contraparte tecnica").grid(row=5, column=0, sticky=tk.W, pady=8)
-        counterpart_container, self.counterpart_combo, _counterpart_error = self._create_validated_combo(
+        self._create_pill_label(form, "Contraparte tecnica").grid(row=5, column=0, sticky=tk.NW, pady=8)
+        self.counterpart_combo = self._create_combo(
             form,
             self.counterpart_var,
             ["Sin contraparte"],
             command=lambda _value=None: self._handle_counterpart_selection(),
             width=280,
         )
-        counterpart_container.grid(row=5, column=1, sticky=tk.EW, padx=12, pady=8)
+        self.counterpart_combo.grid(row=5, column=1, sticky="nsew", padx=12, pady=8)
 
         counterpart_actions = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
         counterpart_actions.grid(row=5, column=2, rowspan=2, sticky=tk.NW, padx=6, pady=8)
@@ -981,15 +980,15 @@ class MainApplication:
             command=self._remove_selected_counterpart,
         ).pack(side=tk.LEFT)
 
-        self._create_pill_label(form, "Cargo contraparte").grid(row=6, column=0, sticky=tk.W, pady=8)
+        self._create_pill_label(form, "Cargo contraparte").grid(row=6, column=0, sticky=tk.NW, pady=8)
         counterpart_role_container, self.counterpart_role_entry, _counterpart_role_error = (
             self._create_validated_entry(form, self.counterpart_role_var, width=280)
         )
-        counterpart_role_container.grid(row=6, column=1, sticky=tk.EW, padx=12, pady=8)
+        counterpart_role_container.grid(row=6, column=1, sticky="nsew", padx=12, pady=8)
 
-        self._create_pill_label(form, "Fecha de evaluación *").grid(row=7, column=0, sticky=tk.W, pady=8)
+        self._create_pill_label(form, "Fecha de evaluación *").grid(row=7, column=0, sticky=tk.NW, pady=8)
         date_container = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
-        date_container.grid(row=7, column=1, sticky=tk.W, padx=12, pady=8)
+        date_container.grid(row=7, column=1, sticky="nsew", padx=12, pady=8)
         date_wrapper = ctk.CTkFrame(
             date_container,
             fg_color=self.colors["field_bg"],
@@ -997,9 +996,11 @@ class MainApplication:
             border_width=1,
             border_color=self.colors["field_border"],
         )
-        date_wrapper.pack(anchor=tk.W)
+        date_wrapper.configure(width=280, height=36)
+        date_wrapper.pack_propagate(False)
+        date_wrapper.pack(anchor=tk.W, fill=tk.X)
         date_entry = self._create_date_entry(date_wrapper, self.date_var, width=18)
-        date_entry.pack(padx=8, pady=6)
+        date_entry.pack(fill=tk.X, expand=True, padx=8, pady=6)
         date_error = ctk.CTkLabel(
             date_container,
             text="",
