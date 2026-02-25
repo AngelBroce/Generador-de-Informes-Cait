@@ -31,12 +31,24 @@ practica profecional/
 │   └── assets/         # Logos e imágenes
 ├── tests/              # Pruebas unitarias
 ├── config/             # Configuración
-├── data/               # Datos y exportaciones
+├── data/               # Datos, anexos y exportaciones
+│   ├── attachments/    # Adjuntos de prueba y anexos
+│   ├── databases/      # Catálogos (ej. evaluadores)
+│   ├── exports/        # PDFs/ZIPs generados
+│   └── reports/        # Informes generados
+├── scripts/            # Scripts de demostración
 ├── docs/               # Documentación
 ├── logs/               # Registros de aplicación
+├── build/              # Salida de PyInstaller
+├── CAIT_Informes.spec  # Configuración del ejecutable
 └── main.py             # Punto de entrada
 
 ```
+
+## Requisitos
+
+- Python 3.x con `pip`
+- `tkinter` habilitado (incluido en la mayoría de instalaciones de Python en Windows)
 
 ## Instalación
 
@@ -66,7 +78,49 @@ Puedes descargar la aplicación lista para usar en el ZIP del release:
 4. **Generar PDF**: El sistema crea el informe con logo de fondo
 5. **Exportar ZIP**: Empaqueta el informe y anexos
 
-## Dependencias principales
+## Dependencias
+
+Instaladas desde [requirements.txt](requirements.txt):
+
+- reportlab==4.0.9
+- PyPDF2==3.0.1
+- Pillow==11.0.0
+- pyinstaller==6.18.0
+- pytest==7.4.3
+- pytest-cov==4.1.0
+- tkcalendar==1.6.1
+- matplotlib==3.9.2
+- seaborn==0.13.2
+
+## Scripts útiles
+
+- [scripts/demo_export_zip.py](scripts/demo_export_zip.py): genera un ZIP de ejemplo con anexos y certificados.
+- [scripts/generate_long_pdf.py](scripts/generate_long_pdf.py): crea un PDF extenso de demostración.
+- [scripts/generate_protocol_test_pdf.py](scripts/generate_protocol_test_pdf.py): prueba el orden de anexos del protocolo.
+
+## Pruebas
+
+Tipos de pruebas contempladas:
+
+- Unitarias: [tests/unit/](tests/unit/)
+- Integracion: [tests/integration/](tests/integration/)
+
+Nota: actualmente las carpetas estan preparadas, pero no incluyen casos automatizados.
+
+```bash
+pytest
+```
+
+Cobertura:
+```bash
+pytest --cov=src --cov-report=term-missing
+```
+
+## Construcción del ejecutable
+
+```bash
+pyinstaller CAIT_Informes.spec
+```
 
 - **reportlab** - Generación de PDFs profesionales
 - **PyPDF2** - Manipulación de PDFs
