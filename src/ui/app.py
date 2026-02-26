@@ -1,6 +1,4 @@
-"""
-Aplicación principal con interfaz gráfica
-"""
+
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -35,8 +33,6 @@ class MainApplication:
         """Inicializa la aplicación"""
         ctk.set_appearance_mode("Light")
         ctk.set_default_color_theme("green")
-        ctk.set_widget_scaling(1.25)
-        ctk.set_window_scaling(1.1)
 
         self.colors = {
             "bg": "#F7F8FA",
@@ -60,8 +56,20 @@ class MainApplication:
 
         self.root = ctk.CTk()
         self.root.title("Generador de Informes Clínicos - CAIT Panamá")
-        self.root.geometry("1500x980")
-        self.root.minsize(1150, 780)
+
+        (
+            widget_scaling,
+            window_scaling,
+            default_width,
+            default_height,
+            min_width,
+            min_height,
+        ) = self._get_adaptive_display_settings()
+        ctk.set_widget_scaling(widget_scaling)
+        ctk.set_window_scaling(window_scaling)
+
+        self.root.geometry(f"{default_width}x{default_height}")
+        self.root.minsize(min_width, min_height)
         self.root.configure(fg_color=self.colors["bg"])
         self.date_validation_cmd = self.root.register(self._validate_date_input)
         self.numeric_validation_cmd = self.root.register(self._validate_numeric_input)
@@ -152,6 +160,37 @@ class MainApplication:
         self.setup_styles()
         self.setup_ui()
         self._purge_old_drafts()
+
+    def _get_adaptive_display_settings(self):
+        """Calcula escala y dimensiones iniciales adaptadas a la pantalla."""
+
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+
+        if screen_width <= 1366 or screen_height <= 768:
+            widget_scaling = 1.0
+            window_scaling = 1.0
+        elif screen_width <= 1536 or screen_height <= 900:
+            widget_scaling = 1.1
+            window_scaling = 1.0
+        else:
+            widget_scaling = 1.25
+            window_scaling = 1.1
+
+        default_width = min(1500, max(980, int(screen_width * 0.94)))
+        default_height = min(980, max(700, int(screen_height * 0.90)))
+
+        min_width = max(900, min(1150, int(screen_width * 0.78)))
+        min_height = max(620, min(780, int(screen_height * 0.72)))
+
+        return (
+            widget_scaling,
+            window_scaling,
+            default_width,
+            default_height,
+            min_width,
+            min_height,
+        )
     
     def setup_styles(self):
         """Configura los estilos de la aplicación."""
@@ -730,13 +769,15 @@ class MainApplication:
         body_frame = ctk.CTkFrame(content_frame, fg_color=self.colors["bg"], corner_radius=0)
         body_frame.pack(fill=tk.BOTH, expand=True)
 
+        menu_width = 260 if self.root.winfo_screenwidth() > 1366 else 230
+
         menu_frame = ctk.CTkFrame(
             body_frame,
             fg_color=surface,
             corner_radius=12,
             border_width=1,
             border_color=border,
-            width=260,
+            width=menu_width,
         )
         menu_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 16))
 
@@ -750,6 +791,42 @@ class MainApplication:
             anchor="w",
         ).pack(fill=tk.X)
         ttk.Separator(menu_frame, orient="horizontal").pack(fill=tk.X, padx=12, pady=(0, 8))
+
+        menu_scroll_container = ctk.CTkFrame(menu_frame, fg_color=surface, corner_radius=0)
+        menu_scroll_container.pack(fill=tk.BOTH, expand=True, padx=(8, 6), pady=(0, 8))
+
+        menu_canvas = tk.Canvas(
+            menu_scroll_container,
+            highlightthickness=0,
+            bg=surface,
+            borderwidth=0,
+        )
+        menu_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        menu_scrollbar = ctk.CTkScrollbar(
+            menu_scroll_container,
+            orientation="vertical",
+            command=menu_canvas.yview,
+            fg_color=surface,
+            button_color=primary_muted,
+            button_hover_color="#D4EDDA",
+            width=10,
+        )
+        menu_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        menu_canvas.configure(yscrollcommand=menu_scrollbar.set)
+
+        menu_buttons_frame = ctk.CTkFrame(menu_canvas, fg_color=surface, corner_radius=0)
+        menu_window_id = menu_canvas.create_window((0, 0), window=menu_buttons_frame, anchor="nw")
+
+        def _update_menu_scroll_region(_event=None):
+            menu_canvas.configure(scrollregion=menu_canvas.bbox("all"))
+
+        def _resize_menu_inner(event):
+            menu_canvas.itemconfig(menu_window_id, width=event.width)
+
+        menu_buttons_frame.bind("<Configure>", _update_menu_scroll_region)
+        menu_canvas.bind("<Configure>", _resize_menu_inner)
+        self._bind_mousewheel(menu_canvas)
 
         sections_container = ctk.CTkFrame(
             body_frame,
@@ -794,7 +871,7 @@ class MainApplication:
 
         for name in self.section_names:
             btn = ctk.CTkButton(
-                menu_frame,
+                menu_buttons_frame,
                 text=name,
                 fg_color="transparent",
                 text_color=primary,
@@ -805,7 +882,7 @@ class MainApplication:
                 anchor="w",
                 command=lambda n=name: self.show_section(n),
             )
-            btn.pack(fill=tk.X, padx=10, pady=4)
+            btn.pack(fill=tk.X, padx=2, pady=4)
             self.section_buttons[name] = btn
 
             frame = ctk.CTkFrame(
@@ -1051,7 +1128,7 @@ class MainApplication:
         date_wrapper.configure(width=280, height=36)
         date_wrapper.pack_propagate(False)
         date_wrapper.pack(anchor=tk.W, fill=tk.X)
-        date_entry = self._create_date_entry(date_wrapper, self.date_var, width=32)
+        date_entry = self._create_date_entry(date_wrapper, self.date_var, width=16)
         date_entry.pack(fill=tk.BOTH, expand=True, padx=8, pady=6)
         date_error = ctk.CTkLabel(
             date_container,
@@ -1593,7 +1670,7 @@ class MainApplication:
             "credential_file": (profile.get("credential_file") or "").strip(),
         }
 
-    def _create_date_entry(self, parent, text_var: tk.StringVar, width: int = 32):
+    def _create_date_entry(self, parent, text_var: tk.StringVar, width: int = 16):
         """Crea un DateEntry con calendario y normalización consistente dd/MM/yyyy."""
 
         self._normalize_date_var(text_var)
@@ -1604,6 +1681,7 @@ class MainApplication:
             selectmode="day",
             date_pattern="dd/MM/yyyy",
             showweeknumbers=False,
+            font=("Segoe UI", 11),
         )
         date_entry.configure(width=width)
 
@@ -1849,9 +1927,9 @@ class MainApplication:
                     border_width=1,
                     border_color=self.colors["field_border"],
                 )
-                date_wrapper.grid(row=idx, column=1, sticky=tk.W, padx=12, pady=8)
-                widget = self._create_date_entry(date_wrapper, var, width=18)
-                widget.pack(padx=8, pady=6)
+                date_wrapper.grid(row=idx, column=1, sticky=tk.EW, padx=12, pady=8)
+                widget = self._create_date_entry(date_wrapper, var, width=16)
+                widget.pack(fill=tk.X, expand=True, padx=8, pady=6)
             else:
                 self._create_text_entry(fields_frame, var, width=340).grid(
                     row=idx, column=1, sticky=tk.EW, padx=12, pady=8
