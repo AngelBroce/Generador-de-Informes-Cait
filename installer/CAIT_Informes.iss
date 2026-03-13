@@ -1,6 +1,8 @@
 [Defines]
 #define MyAppName "CAIT Informes"
-#define MyAppVersion "1.0.3"
+#ifndef MyAppVersion
+#define MyAppVersion "1.0.4"
+#endif
 #define MyAppPublisher "CAIT Panamá"
 #define MyAppExeName "CAIT_Informes.exe"
 #define MyAppId "{{4D174F38-C2F9-4D81-AB4F-8F4C9A1EC9CE}"

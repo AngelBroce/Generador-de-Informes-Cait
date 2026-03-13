@@ -19,3 +19,15 @@ Actualización:
 2) Ejecutar el nuevo instalador CAIT_Informes_Setup.exe (v1.0.3).
 3) Completar el asistente de instalación para reemplazar la versión anterior.
 4) Abrir la aplicación y verificar la eliminación de evaluadores y el tamaño de letra.
+
+v1.0.4 - Mejora de accesibilidad visual.
+
+- Aumentado el tamaño de letra y la escala visual general de la interfaz.
+- Se mantiene la estructura y distribución de pantallas existente.
+- Versionado del instalador centralizado para reflejar correctamente la versión en Windows.
+
+Actualización:
+1) Cerrar CAIT Informes si está abierto.
+2) Ejecutar el nuevo instalador CAIT_Informes_Setup.exe (v1.0.4).
+3) Completar el asistente para reemplazar la versión anterior.
+4) Verificar que en "Aplicaciones instaladas" aparezca la versión 1.0.4.

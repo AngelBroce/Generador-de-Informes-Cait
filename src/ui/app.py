@@ -283,7 +283,7 @@ class MainApplication:
     def _set_section_buttons_compact(self, compact: bool):
         """Ajusta tamaño de botones del menú lateral según modo."""
 
-        font_size = 10 if compact else 11
+        font_size = 12 if compact else 13
         height = 34 if compact else 36
         for button in self.section_buttons.values():
             button.configure(
@@ -298,11 +298,11 @@ class MainApplication:
         screen_height = self.root.winfo_screenheight()
 
         if screen_width <= 1366 or screen_height <= 768:
-            widget_scaling = 1.16
-            window_scaling = 1.06
+            widget_scaling = 1.34
+            window_scaling = 1.14
         elif screen_width <= 1536 or screen_height <= 900:
-            widget_scaling = 1.18
-            window_scaling = 1.04
+            widget_scaling = 1.28
+            window_scaling = 1.10
         else:
             widget_scaling = 1.25
             window_scaling = 1.1
@@ -327,6 +327,9 @@ class MainApplication:
         style = ttk.Style(self.root)
         style.theme_use("clam")
 
+        # Fuente base mayor para mejorar accesibilidad visual sin alterar la estructura.
+        style.configure(".", font=("Segoe UI", 12))
+
         bg = self.colors["bg"]
         surface = self.colors["surface"]
         border = self.colors["border"]
@@ -343,20 +346,20 @@ class MainApplication:
             "Header.TLabel",
             background=primary,
             foreground=surface,
-            font=("Segoe UI", 20, "bold"),
+            font=("Segoe UI", 23, "bold"),
         )
-        style.configure("Title.TLabel", font=("Segoe UI", 17, "bold"), foreground=primary)
-        style.configure("Subtitle.TLabel", font=("Segoe UI", 13), foreground=muted)
+        style.configure("Title.TLabel", font=("Segoe UI", 19, "bold"), foreground=primary)
+        style.configure("Subtitle.TLabel", font=("Segoe UI", 14), foreground=muted)
         style.configure("TLabel", background=surface, foreground=text)
 
-        style.configure("Action.TButton", font=("Segoe UI", 11, "bold"), padding=7)
+        style.configure("Action.TButton", font=("Segoe UI", 12, "bold"), padding=7)
         style.map(
             "Action.TButton",
             background=[("pressed", primary_dark), ("active", primary)],
             foreground=[("active", surface)],
         )
 
-        style.configure("Primary.TButton", font=("Segoe UI", 11, "bold"), padding=7)
+        style.configure("Primary.TButton", font=("Segoe UI", 12, "bold"), padding=7)
         style.map(
             "Primary.TButton",
             background=[("pressed", primary_dark), ("active", primary)],
@@ -365,7 +368,7 @@ class MainApplication:
 
         style.configure(
             "Menu.TButton",
-            font=("Segoe UI", 11),
+            font=("Segoe UI", 12),
             padding=9,
             background=surface,
             foreground=primary,
@@ -374,7 +377,7 @@ class MainApplication:
 
         style.configure(
             "MenuActive.TButton",
-            font=("Segoe UI", 11, "bold"),
+            font=("Segoe UI", 12, "bold"),
             padding=9,
             background=primary,
             foreground=surface,
@@ -397,7 +400,7 @@ class MainApplication:
             "Treeview.Heading",
             background=primary_muted,
             foreground=primary,
-            font=("Segoe UI", 11, "bold"),
+            font=("Segoe UI", 12, "bold"),
         )
         style.map(
             "Treeview",
@@ -455,7 +458,7 @@ class MainApplication:
             corner_radius=999,
             padx=12,
             pady=4,
-            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
         )
 
     def _create_text_entry(self, parent, text_var: tk.StringVar, width: int = 260):
@@ -473,7 +476,7 @@ class MainApplication:
             border_color=self.colors["field_border"],
             fg_color=self.colors["field_bg"],
             text_color=self.colors["text"],
-            font=ctk.CTkFont("Segoe UI", 11),
+            font=ctk.CTkFont("Segoe UI", 13),
         )
 
     def _create_combo(self, parent, text_var: tk.StringVar, values: list[str], command=None, width: int = 260):
@@ -494,7 +497,7 @@ class MainApplication:
             text_color=self.colors["text"],
             button_color=self.colors["primary"],
             button_hover_color=self.colors["primary_dark"],
-            font=ctk.CTkFont("Segoe UI", 11),
+            font=ctk.CTkFont("Segoe UI", 13),
         )
         self._bind_combo_click_anywhere(combo)
         return combo
@@ -508,7 +511,7 @@ class MainApplication:
         error_label = ctk.CTkLabel(
             container,
             text="",
-            font=ctk.CTkFont("Segoe UI", 9),
+            font=ctk.CTkFont("Segoe UI", 11),
             text_color=self.colors["error"],
             anchor="w",
         )
@@ -524,7 +527,7 @@ class MainApplication:
         error_label = ctk.CTkLabel(
             container,
             text="",
-            font=ctk.CTkFont("Segoe UI", 9),
+            font=ctk.CTkFont("Segoe UI", 11),
             text_color=self.colors["error"],
             anchor="w",
         )

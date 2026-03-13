@@ -67,9 +67,14 @@ python main.py
 
 ## Descarga de la aplicación
 
-Puedes descargar la aplicación lista para usar en el ZIP del release:
+Puedes descargar la aplicación lista para usar desde el instalador oficial (Setup):
 
-- https://github.com/AngelBroce/Generador-de-Informes-Cait/raw/main/resources/CAIT_Informes.zip
+- https://github.com/AngelBroce/Generador-de-Informes-Cait/releases/download/v1.0.4/CAIT_Informes_Setup.exe
+
+Instalación rápida:
+1. Descarga `CAIT_Informes_Setup.exe`.
+2. Ejecuta el instalador y sigue el asistente.
+3. Abre **CAIT Informes** desde el acceso directo creado.
 
 ### Flujo de trabajo
 1. **Crear informe**: Selecciona tipo, completa empresa, ubicación y evaluador
@@ -120,6 +125,49 @@ pytest --cov=src --cov-report=term-missing
 
 ```bash
 pyinstaller CAIT_Informes.spec
+```
+
+## Instalador tipo Setup para Windows
+
+Puedes generar un instalador `setup.exe` (asistente de instalación) con **Inno Setup**.
+
+1. Construir el ejecutable con PyInstaller:
+```bash
+pyinstaller CAIT_Informes.spec
+```
+
+2. Instalar Inno Setup (ISCC) y compilar el script del proyecto:
+```bash
+iscc installer\\CAIT_Informes.iss
+```
+
+3. Resultado:
+- El instalador se genera en `installer\\output\\CAIT_Informes_Setup.exe`
+
+Atajo opcional en Windows:
+```bat
+scripts\\build_installer.bat
+```
+
+## Qué subir a Git (nueva forma)
+
+Para distribuir con instalador, sube solo archivos de configuración/código y no artefactos generados.
+
+Versionar en Git:
+- `CAIT_Informes.spec`
+- `installer/CAIT_Informes.iss`
+- `scripts/build_installer.bat`
+- Código fuente (`src/`, `main.py`, etc.)
+
+No versionar:
+- `dist/`
+- `build/`
+- `installer/output/`
+
+Si antes tenías archivos en `dist` ya versionados, sácalos del índice:
+```bash
+git rm -r --cached dist
+git commit -m "chore: eliminar artefactos dist y usar distribución por setup"
 ```
 
 - **reportlab** - Generación de PDFs profesionales
