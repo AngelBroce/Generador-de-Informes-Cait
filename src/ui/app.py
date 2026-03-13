@@ -1681,8 +1681,10 @@ class MainApplication:
         safe_name = self._sanitize_filename(evaluator_name or "evaluador")
         destination = target_dir / f"{safe_name}{source.suffix}"
         shutil.copy2(source, destination)
-
-        return str(destination.relative_to(self.project_root))
+        try:
+            return str(destination.relative_to(self.project_root))
+        except ValueError:
+            return str(destination)
 
     def _open_add_evaluator_dialog(self) -> None:
         """Muestra un cuadro de diálogo para registrar nuevos evaluadores."""

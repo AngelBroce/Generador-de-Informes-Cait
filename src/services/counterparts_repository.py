@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
-DEFAULT_DB_PATH = Path(__file__).resolve().parents[2] / "data" / "databases" / "counterparts.json"
+
+def _get_default_db_path() -> Path:
+    runtime_data_root = os.getenv("CAIT_DATA_ROOT")
+    if runtime_data_root:
+        return Path(runtime_data_root) / "databases" / "counterparts.json"
+    return Path(__file__).resolve().parents[2] / "data" / "databases" / "counterparts.json"
+
 
 
 n_slug_invalid = re.compile(r"[^a-z0-9]+")
@@ -17,7 +24,8 @@ class CounterpartRepository:
     """Administra el catalogo persistente de contrapartes tecnicas."""
 
     def __init__(self, db_path: Optional[Path] = None):
-        self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
+        resolved_path = Path(db_path) if db_path else _get_default_db_path()
+        self.db_path = resolved_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._ensure_storage()
 
