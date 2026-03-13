@@ -69,7 +69,7 @@ python main.py
 
 Puedes descargar la aplicación lista para usar desde el instalador oficial (Setup):
 
-- https://github.com/AngelBroce/Generador-de-Informes-Cait/releases/download/v1.0.4/CAIT_Informes_Setup.exe
+- https://github.com/AngelBroce/Generador-de-Informes-Cait/releases/download/v1.0.5/CAIT_Informes_Setup.exe
 
 Instalación rápida:
 1. Descarga `CAIT_Informes_Setup.exe`.
