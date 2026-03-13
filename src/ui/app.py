@@ -67,12 +67,24 @@ class MainApplication:
         ) = self._get_adaptive_display_settings()
         ctk.set_widget_scaling(widget_scaling)
         ctk.set_window_scaling(window_scaling)
+        self.base_widget_scaling = widget_scaling
 
         self.root.geometry(f"{default_width}x{default_height}")
         self.root.minsize(min_width, min_height)
         self.root.configure(fg_color=self.colors["bg"])
+        self._responsive_mode = "compact" if default_width <= 1280 else "regular"
+        self._responsive_after_id = None
+        self.menu_frame = None
+        self.menu_buttons_frame = None
+        self.actions_header = None
+        self.actions_title_label = None
+        self.actions_buttons_frame = None
+        self.action_buttons = []
+        self._active_mousewheel_canvas = None
+        self._mousewheel_initialized = False
         self.date_validation_cmd = self.root.register(self._validate_date_input)
         self.numeric_validation_cmd = self.root.register(self._validate_numeric_input)
+        self._initialize_mousewheel_support()
         
         # Datos del informe actual
         self.current_report = None
@@ -116,6 +128,15 @@ class MainApplication:
         self.attendance_tree = None
         self.attendance_status_label = None
 
+        # Rutas base de lectura/escritura
+        self.project_root = Path(__file__).parent.parent.parent
+        self.data_root = self._resolve_runtime_data_root()
+        os.environ["CAIT_DATA_ROOT"] = str(self.data_root)
+        (self.data_root / "reports").mkdir(parents=True, exist_ok=True)
+        (self.data_root / "exports").mkdir(parents=True, exist_ok=True)
+        (self.data_root / "attachments").mkdir(parents=True, exist_ok=True)
+        (self.data_root / "databases").mkdir(parents=True, exist_ok=True)
+
         # Catálogo de evaluadores cargado desde JSON
         self.evaluators_repo = EvaluatorRepository()
         self.evaluator_profiles = {}
@@ -141,9 +162,6 @@ class MainApplication:
         self.counterpart_combo = None
         self.counterpart_role_entry = None
         
-        # Ruta base del proyecto
-        self.project_root = Path(__file__).parent.parent.parent
-
         # Rutas de icono/logo de la aplicación
         runtime_base = Path(getattr(sys, "_MEIPASS", self.project_root))
         self.app_icon_path = runtime_base / "logo-apli-removebg-preview.ico"
@@ -159,7 +177,119 @@ class MainApplication:
         
         self.setup_styles()
         self.setup_ui()
+        self._initialize_responsive_behavior()
         self._purge_old_drafts()
+
+    def _resolve_runtime_data_root(self) -> Path:
+        """Devuelve la ruta de datos editable según el modo de ejecución."""
+
+        if getattr(sys, "frozen", False):
+            local_appdata = Path(os.getenv("LOCALAPPDATA") or Path.home())
+            return local_appdata / "CAIT Informes" / "data"
+        return self.project_root / "data"
+
+    def _compute_menu_width(self, window_width: int | None = None) -> int:
+        """Calcula el ancho del panel de secciones según el tamaño de ventana."""
+
+        width = window_width or self.root.winfo_width() or self.root.winfo_screenwidth()
+        if width <= 1120:
+            return 188
+        if width <= 1280:
+            return 206
+        if width <= 1480:
+            return 230
+        return 260
+
+    def _responsive_field_width(self, width: int) -> int:
+        """Ajusta anchos fijos de campos para modo compacto."""
+
+        if self._responsive_mode == "compact":
+            return max(120, int(width * 0.78))
+        return width
+
+    def _responsive_date_width(self, width: int) -> int:
+        """Ajusta ancho de DateEntry (en caracteres) para pantallas pequeñas."""
+
+        if self._responsive_mode == "compact":
+            return max(12, int(width * 0.78))
+        return width
+
+    def _initialize_responsive_behavior(self):
+        """Inicializa listeners y aplica perfil responsive inicial."""
+
+        self.root.bind("<Configure>", self._on_root_configure)
+        self._apply_responsive_layout(force=True)
+
+    def _on_root_configure(self, event):
+        """Reacciona al redimensionado con debounce para evitar parpadeos."""
+
+        if event.widget is not self.root:
+            return
+
+        if self._responsive_after_id is not None:
+            self.root.after_cancel(self._responsive_after_id)
+        self._responsive_after_id = self.root.after(120, self._apply_responsive_layout)
+
+    def _apply_responsive_layout(self, force: bool = False):
+        """Aplica ajustes de distribución y tamaños según ancho actual."""
+
+        self._responsive_after_id = None
+        current_width = self.root.winfo_width() or self.root.winfo_screenwidth()
+        # Histéresis para evitar alternancias rápidas al redimensionar cerca del umbral
+        if self._responsive_mode == "compact":
+            mode = "compact" if current_width < 1360 else "regular"
+        else:
+            mode = "compact" if current_width <= 1220 else "regular"
+
+        if not force and mode == self._responsive_mode:
+            if self.menu_frame is not None:
+                self.menu_frame.configure(width=self._compute_menu_width(current_width))
+            return
+
+        self._responsive_mode = mode
+
+        if self.menu_frame is not None:
+            self.menu_frame.configure(width=self._compute_menu_width(current_width))
+
+        if mode == "compact":
+            self._set_actions_header_layout(compact=True)
+            self._set_section_buttons_compact(compact=True)
+        else:
+            self._set_actions_header_layout(compact=False)
+            self._set_section_buttons_compact(compact=False)
+
+    def _set_actions_header_layout(self, compact: bool):
+        """Reordena los botones de acciones para evitar recortes horizontales."""
+
+        if not self.actions_title_label or not self.actions_buttons_frame:
+            return
+
+        self.actions_title_label.pack_forget()
+        self.actions_buttons_frame.pack_forget()
+
+        if compact:
+            self.actions_title_label.pack(anchor=tk.W, fill=tk.X)
+            self.actions_buttons_frame.pack(fill=tk.X, pady=(8, 0))
+            for btn in self.action_buttons:
+                btn.pack_forget()
+                btn.pack(fill=tk.X, pady=(0, 6))
+        else:
+            self.actions_title_label.pack(side=tk.LEFT)
+            self.actions_buttons_frame.pack(side=tk.RIGHT)
+            for btn in self.action_buttons:
+                btn.pack_forget()
+                btn.pack(side=tk.LEFT, padx=6)
+
+    def _set_section_buttons_compact(self, compact: bool):
+        """Ajusta tamaño de botones del menú lateral según modo."""
+
+        font_size = 10 if compact else 11
+        height = 34 if compact else 36
+        for button in self.section_buttons.values():
+            button.configure(
+                font=ctk.CTkFont("Segoe UI", font_size),
+                height=height,
+            )
 
     def _get_adaptive_display_settings(self):
         """Calcula escala y dimensiones iniciales adaptadas a la pantalla."""
@@ -168,11 +298,11 @@ class MainApplication:
         screen_height = self.root.winfo_screenheight()
 
         if screen_width <= 1366 or screen_height <= 768:
-            widget_scaling = 1.0
-            window_scaling = 1.0
+            widget_scaling = 1.16
+            window_scaling = 1.06
         elif screen_width <= 1536 or screen_height <= 900:
-            widget_scaling = 1.1
-            window_scaling = 1.0
+            widget_scaling = 1.18
+            window_scaling = 1.04
         else:
             widget_scaling = 1.25
             window_scaling = 1.1
@@ -180,8 +310,8 @@ class MainApplication:
         default_width = min(1500, max(980, int(screen_width * 0.94)))
         default_height = min(980, max(700, int(screen_height * 0.90)))
 
-        min_width = max(900, min(1150, int(screen_width * 0.78)))
-        min_height = max(620, min(780, int(screen_height * 0.72)))
+        min_width = max(760, min(980, int(screen_width * 0.62)))
+        min_height = max(560, min(720, int(screen_height * 0.64)))
 
         return (
             widget_scaling,
@@ -331,6 +461,8 @@ class MainApplication:
     def _create_text_entry(self, parent, text_var: tk.StringVar, width: int = 260):
         """Campo de entrada con estilo moderno."""
 
+        width = self._responsive_field_width(width)
+
         return ctk.CTkEntry(
             parent,
             textvariable=text_var,
@@ -346,6 +478,7 @@ class MainApplication:
 
     def _create_combo(self, parent, text_var: tk.StringVar, values: list[str], command=None, width: int = 260):
         """Combo con estilo alineado a la interfaz."""
+        width = self._responsive_field_width(width)
         combo = ctk.CTkComboBox(
             parent,
             variable=text_var,
@@ -703,18 +836,24 @@ class MainApplication:
 
         actions_header = ctk.CTkFrame(content_frame, fg_color=self.colors["bg"], corner_radius=0)
         actions_header.pack(fill=tk.X, pady=(0, 6))
+        self.actions_header = actions_header
 
-        ctk.CTkLabel(
+        actions_title = ctk.CTkLabel(
             actions_header,
             text="Acciones Principales",
             font=ctk.CTkFont("Segoe UI", 14, "bold"),
             text_color=text,
-        ).pack(side=tk.LEFT)
+        )
+        actions_title.pack(side=tk.LEFT)
+        self.actions_title_label = actions_title
 
         right_buttons = ctk.CTkFrame(actions_header, fg_color=self.colors["bg"], corner_radius=0)
         right_buttons.pack(side=tk.RIGHT)
+        self.actions_buttons_frame = right_buttons
 
-        ctk.CTkButton(
+        self.action_buttons = []
+
+        new_report_btn = ctk.CTkButton(
             right_buttons,
             text="+ Nuevo informe",
             fg_color=primary_muted,
@@ -724,9 +863,11 @@ class MainApplication:
             corner_radius=10,
             height=36,
             command=self._reset_form_state,
-        ).pack(side=tk.LEFT, padx=6)
+        )
+        new_report_btn.pack(side=tk.LEFT, padx=6)
+        self.action_buttons.append(new_report_btn)
 
-        ctk.CTkButton(
+        save_draft_btn = ctk.CTkButton(
             right_buttons,
             text="Guardar borrador",
             fg_color=primary_muted,
@@ -736,9 +877,11 @@ class MainApplication:
             corner_radius=10,
             height=36,
             command=self.save_report_draft,
-        ).pack(side=tk.LEFT, padx=6)
+        )
+        save_draft_btn.pack(side=tk.LEFT, padx=6)
+        self.action_buttons.append(save_draft_btn)
 
-        ctk.CTkButton(
+        load_draft_btn = ctk.CTkButton(
             right_buttons,
             text="Cargar borrador",
             fg_color="transparent",
@@ -750,9 +893,11 @@ class MainApplication:
             corner_radius=10,
             height=36,
             command=self.load_report_draft,
-        ).pack(side=tk.LEFT, padx=6)
+        )
+        load_draft_btn.pack(side=tk.LEFT, padx=6)
+        self.action_buttons.append(load_draft_btn)
 
-        ctk.CTkButton(
+        export_zip_btn = ctk.CTkButton(
             right_buttons,
             text="Exportar ZIP",
             fg_color=primary,
@@ -762,14 +907,16 @@ class MainApplication:
             corner_radius=10,
             height=36,
             command=self.export_zip,
-        ).pack(side=tk.LEFT, padx=6)
+        )
+        export_zip_btn.pack(side=tk.LEFT, padx=6)
+        self.action_buttons.append(export_zip_btn)
 
         ttk.Separator(content_frame, orient="horizontal").pack(fill=tk.X, pady=8)
 
         body_frame = ctk.CTkFrame(content_frame, fg_color=self.colors["bg"], corner_radius=0)
         body_frame.pack(fill=tk.BOTH, expand=True)
 
-        menu_width = 260 if self.root.winfo_screenwidth() > 1366 else 230
+        menu_width = self._compute_menu_width()
 
         menu_frame = ctk.CTkFrame(
             body_frame,
@@ -780,6 +927,8 @@ class MainApplication:
             width=menu_width,
         )
         menu_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 16))
+        menu_frame.pack_propagate(False)
+        self.menu_frame = menu_frame
 
         menu_header = ctk.CTkFrame(menu_frame, fg_color=surface, corner_radius=0)
         menu_header.pack(fill=tk.X, padx=14, pady=(14, 6))
@@ -792,41 +941,17 @@ class MainApplication:
         ).pack(fill=tk.X)
         ttk.Separator(menu_frame, orient="horizontal").pack(fill=tk.X, padx=12, pady=(0, 8))
 
-        menu_scroll_container = ctk.CTkFrame(menu_frame, fg_color=surface, corner_radius=0)
-        menu_scroll_container.pack(fill=tk.BOTH, expand=True, padx=(8, 6), pady=(0, 8))
-
-        menu_canvas = tk.Canvas(
-            menu_scroll_container,
-            highlightthickness=0,
-            bg=surface,
-            borderwidth=0,
-        )
-        menu_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        menu_scrollbar = ctk.CTkScrollbar(
-            menu_scroll_container,
-            orientation="vertical",
-            command=menu_canvas.yview,
+        menu_buttons_frame = ctk.CTkScrollableFrame(
+            menu_frame,
             fg_color=surface,
-            button_color=primary_muted,
-            button_hover_color="#D4EDDA",
-            width=10,
+            corner_radius=0,
+            border_width=0,
+            scrollbar_button_color=primary_muted,
+            scrollbar_button_hover_color="#D4EDDA",
         )
-        menu_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        menu_canvas.configure(yscrollcommand=menu_scrollbar.set)
-
-        menu_buttons_frame = ctk.CTkFrame(menu_canvas, fg_color=surface, corner_radius=0)
-        menu_window_id = menu_canvas.create_window((0, 0), window=menu_buttons_frame, anchor="nw")
-
-        def _update_menu_scroll_region(_event=None):
-            menu_canvas.configure(scrollregion=menu_canvas.bbox("all"))
-
-        def _resize_menu_inner(event):
-            menu_canvas.itemconfig(menu_window_id, width=event.width)
-
-        menu_buttons_frame.bind("<Configure>", _update_menu_scroll_region)
-        menu_canvas.bind("<Configure>", _resize_menu_inner)
-        self._bind_mousewheel(menu_canvas)
+        menu_buttons_frame.pack(fill=tk.BOTH, expand=True, padx=(8, 6), pady=(0, 8))
+        self.menu_buttons_frame = menu_buttons_frame
+        self._bind_scrollable_frame_mousewheel(menu_buttons_frame)
 
         sections_container = ctk.CTkFrame(
             body_frame,
@@ -965,6 +1090,15 @@ class MainApplication:
         form = ctk.CTkFrame(card_body, fg_color="transparent", corner_radius=0)
         form.pack(fill=tk.X)
         form.grid_columnconfigure(1, weight=1)
+        compact_layout = self._responsive_mode == "compact"
+
+        evaluator_actions_row = 4 if compact_layout else 3
+        evaluator_detail_row = 5 if compact_layout else 4
+        combined_evaluator_row = 6 if compact_layout else 5
+        counterpart_row = 7 if compact_layout else 6
+        counterpart_actions_row = 8 if compact_layout else 6
+        counterpart_role_row = 9 if compact_layout else 7
+        date_row = 10 if compact_layout else 8
 
         self._create_pill_label(form, "Tipo de informe *").grid(row=0, column=0, sticky=tk.NW, pady=8)
         type_combo = self._create_combo(
@@ -1001,7 +1135,10 @@ class MainApplication:
         self.evaluator_combo.grid(row=3, column=1, sticky="nsew", padx=12, pady=8)
 
         evaluator_actions = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
-        evaluator_actions.grid(row=3, column=2, sticky=tk.W, padx=6, pady=8)
+        if compact_layout:
+            evaluator_actions.grid(row=evaluator_actions_row, column=1, sticky=tk.W, padx=12, pady=(0, 8))
+        else:
+            evaluator_actions.grid(row=evaluator_actions_row, column=2, sticky=tk.W, padx=6, pady=8)
         ctk.CTkButton(
             evaluator_actions,
             text="Agregar",
@@ -1034,10 +1171,25 @@ class MainApplication:
             text_color=self.colors["text_muted"],
             anchor="w",
         )
-        self.evaluator_detail_label.grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=12, pady=(0, 6))
+        evaluator_columnspan = 1 if compact_layout else 2
+        self.evaluator_detail_label.grid(
+            row=evaluator_detail_row,
+            column=1,
+            columnspan=evaluator_columnspan,
+            sticky=tk.W,
+            padx=12,
+            pady=(0, 6),
+        )
 
         self.combined_evaluators_container = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
-        self.combined_evaluators_container.grid(row=5, column=1, columnspan=2, sticky="nsew", padx=12, pady=(0, 8))
+        self.combined_evaluators_container.grid(
+            row=combined_evaluator_row,
+            column=1,
+            columnspan=evaluator_columnspan,
+            sticky="nsew",
+            padx=12,
+            pady=(0, 8),
+        )
 
         combined_audio_label = ctk.CTkLabel(
             self.combined_evaluators_container,
@@ -1074,7 +1226,7 @@ class MainApplication:
         self.spiro_evaluator_combo.pack(fill=tk.X)
         self.combined_evaluators_container.grid_remove()
 
-        self._create_pill_label(form, "Contraparte tecnica").grid(row=6, column=0, sticky=tk.W, pady=8)
+        self._create_pill_label(form, "Contraparte tecnica").grid(row=counterpart_row, column=0, sticky=tk.W, pady=8)
         self.counterpart_combo = self._create_combo(
             form,
             self.counterpart_var,
@@ -1082,10 +1234,13 @@ class MainApplication:
             command=lambda _value=None: self._handle_counterpart_selection(),
             width=280,
         )
-        self.counterpart_combo.grid(row=6, column=1, sticky="nsew", padx=12, pady=8)
+        self.counterpart_combo.grid(row=counterpart_row, column=1, sticky="nsew", padx=12, pady=8)
 
         counterpart_actions = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
-        counterpart_actions.grid(row=6, column=2, sticky=tk.W, padx=6, pady=8)
+        if compact_layout:
+            counterpart_actions.grid(row=counterpart_actions_row, column=1, sticky=tk.W, padx=12, pady=(0, 8))
+        else:
+            counterpart_actions.grid(row=counterpart_actions_row, column=2, sticky=tk.W, padx=6, pady=8)
         ctk.CTkButton(
             counterpart_actions,
             text="Agregar",
@@ -1111,13 +1266,13 @@ class MainApplication:
             command=self._remove_selected_counterpart,
         ).pack(side=tk.LEFT)
 
-        self._create_pill_label(form, "Cargo contraparte").grid(row=7, column=0, sticky=tk.W, pady=8)
+        self._create_pill_label(form, "Cargo contraparte").grid(row=counterpart_role_row, column=0, sticky=tk.W, pady=8)
         self.counterpart_role_entry = self._create_text_entry(form, self.counterpart_role_var, width=280)
-        self.counterpart_role_entry.grid(row=7, column=1, sticky="nsew", padx=12, pady=8)
+        self.counterpart_role_entry.grid(row=counterpart_role_row, column=1, sticky="nsew", padx=12, pady=8)
 
-        self._create_pill_label(form, "Fecha de evaluación *").grid(row=8, column=0, sticky=tk.W, pady=8)
+        self._create_pill_label(form, "Fecha de evaluación *").grid(row=date_row, column=0, sticky=tk.W, pady=8)
         date_container = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
-        date_container.grid(row=8, column=1, sticky="nsew", padx=12, pady=8)
+        date_container.grid(row=date_row, column=1, sticky="nsew", padx=12, pady=8)
         date_wrapper = ctk.CTkFrame(
             date_container,
             fg_color=self.colors["field_bg"],
@@ -1125,7 +1280,7 @@ class MainApplication:
             border_width=1,
             border_color=self.colors["field_border"],
         )
-        date_wrapper.configure(width=280, height=36)
+        date_wrapper.configure(height=36)
         date_wrapper.pack_propagate(False)
         date_wrapper.pack(anchor=tk.W, fill=tk.X)
         date_entry = self._create_date_entry(date_wrapper, self.date_var, width=16)
@@ -1419,7 +1574,7 @@ class MainApplication:
     def _remove_selected_evaluator(self) -> None:
         """Elimina el evaluador seleccionado del catalogo."""
 
-        evaluator_id = self.selected_evaluator_id.get()
+        evaluator_id = self._resolve_evaluator_id_from_selection()
         if not evaluator_id:
             messagebox.showinfo("Sin seleccion", "Selecciona un evaluador para eliminarlo.")
             return
@@ -1457,7 +1612,26 @@ class MainApplication:
             if profile.get("name") == selected_name:
                 self._select_evaluator(eval_id)
                 return
+        self.selected_evaluator_id.set("")
         self._update_evaluator_details_preview()
+
+    def _resolve_evaluator_id_from_selection(self) -> str:
+        """Resuelve el ID del evaluador usando ID interno o nombre visible del combo."""
+
+        evaluator_id = (self.selected_evaluator_id.get() or "").strip()
+        if evaluator_id and evaluator_id in self.evaluator_profiles:
+            return evaluator_id
+
+        selected_name = (self.evaluator_var.get() or "").strip()
+        if not selected_name:
+            return ""
+
+        for eval_id, profile in self.evaluator_profiles.items():
+            if profile.get("name", "").strip() == selected_name:
+                self.selected_evaluator_id.set(eval_id)
+                return eval_id
+
+        return ""
 
     def _update_evaluator_details_preview(self) -> None:
         """Refresca la etiqueta con la profesión y registro del evaluador."""
@@ -1498,7 +1672,7 @@ class MainApplication:
         if not source.exists():
             return ""
 
-        target_dir = self.project_root / "data" / "attachments" / "idoneidad"
+        target_dir = self.data_root / "attachments" / "idoneidad"
         target_dir.mkdir(parents=True, exist_ok=True)
 
         safe_name = self._sanitize_filename(evaluator_name or "evaluador")
@@ -1674,6 +1848,7 @@ class MainApplication:
         """Crea un DateEntry con calendario y normalización consistente dd/MM/yyyy."""
 
         self._normalize_date_var(text_var)
+        width = self._responsive_date_width(width)
 
         date_entry = DateEntry(
             parent,
@@ -2094,29 +2269,73 @@ class MainApplication:
     def _bind_mousewheel(self, canvas: tk.Canvas):
         """Activa el desplazamiento con la rueda del ratón dentro del canvas."""
 
-        def _on_mousewheel(event):
-            delta = 0
-            if event.delta:
-                delta = int(-1 * (event.delta / 120))
-            elif event.num == 5:
-                delta = 1
-            elif event.num == 4:
-                delta = -1
-            if delta:
-                canvas.yview_scroll(delta, "units")
-
         def _activate(_event):
-            canvas.bind_all("<MouseWheel>", _on_mousewheel)
-            canvas.bind_all("<Button-4>", _on_mousewheel)
-            canvas.bind_all("<Button-5>", _on_mousewheel)
+            self._active_mousewheel_canvas = canvas
 
         def _deactivate(_event):
-            canvas.unbind_all("<MouseWheel>")
-            canvas.unbind_all("<Button-4>")
-            canvas.unbind_all("<Button-5>")
+            if self._active_mousewheel_canvas is canvas:
+                self._active_mousewheel_canvas = None
 
-        canvas.bind("<Enter>", _activate)
-        canvas.bind("<Leave>", _deactivate)
+        canvas.bind("<Enter>", _activate, add="+")
+        canvas.bind("<Leave>", _deactivate, add="+")
+
+    def _bind_scrollable_frame_mousewheel(self, scrollable_frame: ctk.CTkScrollableFrame):
+        """Enlaza la rueda del ratón a un CTkScrollableFrame."""
+
+        canvas = getattr(scrollable_frame, "_parent_canvas", None)
+        if canvas is None:
+            return
+
+        self._bind_mousewheel(canvas)
+
+        def _activate(_event):
+            self._active_mousewheel_canvas = canvas
+
+        def _deactivate(_event):
+            if self._active_mousewheel_canvas is canvas:
+                self._active_mousewheel_canvas = None
+
+        scrollable_frame.bind("<Enter>", _activate, add="+")
+        scrollable_frame.bind("<Leave>", _deactivate, add="+")
+
+    def _initialize_mousewheel_support(self):
+        """Inicializa un manejador global de rueda del ratón para scroll vertical."""
+
+        if self._mousewheel_initialized:
+            return
+
+        self.root.bind_all("<MouseWheel>", self._on_global_mousewheel, add="+")
+        self.root.bind_all("<Button-4>", self._on_global_mousewheel, add="+")
+        self.root.bind_all("<Button-5>", self._on_global_mousewheel, add="+")
+        self._mousewheel_initialized = True
+
+    def _on_global_mousewheel(self, event):
+        """Redirige la rueda del ratón al canvas activo bajo el cursor."""
+
+        canvas = self._active_mousewheel_canvas
+        if canvas is None:
+            return None
+
+        try:
+            if not canvas.winfo_exists():
+                self._active_mousewheel_canvas = None
+                return None
+        except Exception:
+            self._active_mousewheel_canvas = None
+            return None
+
+        delta = 0
+        if getattr(event, "delta", 0):
+            delta = int(-1 * (event.delta / 120))
+        elif getattr(event, "num", None) == 5:
+            delta = 1
+        elif getattr(event, "num", None) == 4:
+            delta = -1
+
+        if delta:
+            canvas.yview_scroll(delta, "units")
+            return "break"
+        return None
 
     def _render_result_blocks(self):
         """Reconstruye los bloques de captura según el tipo de informe."""
@@ -2178,8 +2397,10 @@ class MainApplication:
 
         form = ctk.CTkFrame(block_body, fg_color="transparent", corner_radius=0)
         form.pack(fill=tk.X)
+        compact_layout = self._responsive_mode == "compact"
         form.grid_columnconfigure(1, weight=1)
-        form.grid_columnconfigure(3, weight=1)
+        if not compact_layout:
+            form.grid_columnconfigure(3, weight=1)
 
         self._create_pill_label(form, "Nombre completo").grid(row=0, column=0, sticky=tk.NW, pady=6)
         name_container, name_entry, name_error = self._create_validated_entry(
@@ -2188,31 +2409,44 @@ class MainApplication:
         name_container.grid(row=0, column=1, sticky="nsew", padx=12, pady=6)
         name_validator = self._attach_required_validation(form_vars["name"], name_entry, name_error, "Requerido")
 
-        self._create_pill_label(form, "Cédula").grid(row=0, column=2, sticky=tk.NW, pady=6)
+        id_row = 1 if compact_layout else 0
+        id_label_col = 0 if compact_layout else 2
+        id_value_col = 1 if compact_layout else 3
+        self._create_pill_label(form, "Cédula").grid(row=id_row, column=id_label_col, sticky=tk.NW, pady=6)
         id_container, id_entry, id_error = self._create_validated_entry(
             form, form_vars["identification"], width=220
         )
-        id_container.grid(row=0, column=3, sticky="nsew", padx=12, pady=6)
+        id_container.grid(row=id_row, column=id_value_col, sticky="nsew", padx=12, pady=6)
         id_validator = self._attach_id_validation(form_vars["identification"], id_entry, id_error)
 
-        self._create_pill_label(form, "Edad").grid(row=1, column=0, sticky=tk.NW, pady=6)
+        age_row = 2 if compact_layout else 1
+        self._create_pill_label(form, "Edad").grid(row=age_row, column=0, sticky=tk.NW, pady=6)
         age_container, age_entry, age_error = self._create_validated_entry(
             form, form_vars["age"], width=120
         )
-        age_container.grid(row=1, column=1, sticky=tk.NW, padx=12, pady=6)
+        age_container.grid(row=age_row, column=1, sticky=tk.NW, padx=12, pady=6)
         age_entry.configure(validate="key", validatecommand=(self.numeric_validation_cmd, "%P"))
         age_validator = self._attach_numeric_validation(form_vars["age"], age_entry, age_error, "Solo numeros")
 
-        self._create_pill_label(form, "Cargo").grid(row=1, column=2, sticky=tk.NW, pady=6)
+        position_row = 3 if compact_layout else 1
+        position_label_col = 0 if compact_layout else 2
+        position_value_col = 1 if compact_layout else 3
+        self._create_pill_label(form, "Cargo").grid(
+            row=position_row,
+            column=position_label_col,
+            sticky=tk.NW,
+            pady=6,
+        )
         position_container, position_entry, position_error = self._create_validated_entry(
             form, form_vars["position"], width=220
         )
-        position_container.grid(row=1, column=3, sticky="nsew", padx=12, pady=6)
+        position_container.grid(row=position_row, column=position_value_col, sticky="nsew", padx=12, pady=6)
         position_validator = self._attach_required_validation(
             form_vars["position"], position_entry, position_error, "Requerido"
         )
 
-        self._create_pill_label(form, "Resultado").grid(row=2, column=0, sticky=tk.NW, pady=6)
+        result_row = 4 if compact_layout else 2
+        self._create_pill_label(form, "Resultado").grid(row=result_row, column=0, sticky=tk.NW, pady=6)
         result_container, result_combo, result_error = self._create_validated_combo(
             form,
             form_vars["result"],
@@ -2220,13 +2454,23 @@ class MainApplication:
             command=lambda _value=None, key=dataset_key: self._update_result_preview(key),
             width=240,
         )
-        result_container.grid(row=2, column=1, sticky=tk.NW, padx=12, pady=6)
+        result_container.grid(row=result_row, column=1, sticky=tk.NW, padx=12, pady=6)
         result_validator = self._attach_required_validation(
             form_vars["result"], result_combo, result_error, "Requerido"
         )
 
         preview_container = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
-        preview_container.grid(row=2, column=2, columnspan=2, sticky=tk.NW, padx=12, pady=6)
+        preview_row = 5 if compact_layout else 2
+        preview_col = 1 if compact_layout else 2
+        preview_span = 1 if compact_layout else 2
+        preview_container.grid(
+            row=preview_row,
+            column=preview_col,
+            columnspan=preview_span,
+            sticky=tk.NW,
+            padx=12,
+            pady=6,
+        )
         ctk.CTkLabel(
             preview_container,
             text="Color del resultado",
@@ -2246,7 +2490,8 @@ class MainApplication:
         preview_label.pack(anchor=tk.W, pady=(4, 0))
 
         form.columnconfigure(1, weight=1)
-        form.columnconfigure(3, weight=1)
+        if not compact_layout:
+            form.columnconfigure(3, weight=1)
 
         button_frame = ctk.CTkFrame(block_body, fg_color="transparent", corner_radius=0)
         button_frame.pack(fill=tk.X, pady=(8, 4))
@@ -3877,7 +4122,7 @@ class MainApplication:
         self._sync_report_evaluated()
 
         try:
-            exports_dir = self.project_root / "data" / "exports"
+            exports_dir = self.data_root / "exports"
             exports_dir.mkdir(parents=True, exist_ok=True)
 
             default_name = f"{self.current_report['id']}.pdf"
@@ -4016,7 +4261,7 @@ class MainApplication:
     def save_report_draft(self) -> None:
         """Guarda un borrador en JSON para reabrirlo luego."""
 
-        drafts_dir = self.project_root / "data" / "reports"
+        drafts_dir = self.data_root / "reports"
         drafts_dir.mkdir(parents=True, exist_ok=True)
         default_name = f"borrador_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         target = filedialog.asksaveasfilename(
@@ -4106,7 +4351,7 @@ class MainApplication:
     def _list_draft_files(self) -> list[Path]:
         """Devuelve los archivos JSON de borradores."""
 
-        drafts_dir = self.project_root / "data" / "reports"
+        drafts_dir = self.data_root / "reports"
         drafts_dir.mkdir(parents=True, exist_ok=True)
         return sorted(drafts_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
 
@@ -4289,7 +4534,7 @@ class MainApplication:
 
         self._sync_report_evaluated()
 
-        exports_dir = self.project_root / "data" / "exports"
+        exports_dir = self.data_root / "exports"
         exports_dir.mkdir(parents=True, exist_ok=True)
 
         base_name = self._build_export_base_name()
