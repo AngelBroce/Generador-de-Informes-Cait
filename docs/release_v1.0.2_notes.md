@@ -48,3 +48,13 @@ Actualización:
 2) Instalar `CAIT_Informes_Setup_v1.0.6.exe` o usar `CAIT_Informes_Portable_v1.0.6.zip`.
 3) Si usas descarga web, validar hash con `SHA256SUMS.txt` antes de ejecutar.
 4) Verificar en la pantalla de presentación que puedes alternar entre "Una fecha" y "Varias fechas".
+
+v1.0.7 - Corrección de distribución visual y recompilación de instalador.
+
+- Se elimina la franja de estado inferior para que el contenido use todo el alto de la ventana.
+- Se recompila el instalador con los cambios recientes de fechas (una/varias).
+
+Actualización:
+1) Cerrar CAIT Informes.
+2) Instalar `CAIT_Informes_Setup_v1.0.7.exe` o usar `CAIT_Informes_Portable_v1.0.7.zip`.
+3) Verificar en Presentación del informe el selector de fechas y que el contenido llega hasta abajo.

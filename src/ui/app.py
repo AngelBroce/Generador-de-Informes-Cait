@@ -1068,8 +1068,6 @@ class MainApplication:
         self.progress_label.pack(anchor=tk.W)
         self._update_section_progress()
 
-        ttk.Separator(content_frame, orient="horizontal").pack(fill=tk.X, pady=10)
-
         self.status_label = ctk.CTkLabel(
             content_frame,
             text="Listo para crear un nuevo informe",
@@ -1077,7 +1075,7 @@ class MainApplication:
             text_color=primary,
             anchor="w",
         )
-        self.status_label.pack(pady=10, anchor=tk.W)
+        # Se mantiene sin pack para conservar compatibilidad con configure() sin ocupar espacio visual.
     
     def _build_presentation_section(self):
         """Construye la sección de presentación del informe."""
