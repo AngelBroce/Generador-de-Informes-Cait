@@ -13,7 +13,7 @@ import json
 import shutil
 import subprocess
 import platform
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Asegurar que el proyecto raíz esté en sys.path para permitir "import src.*"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -163,8 +163,14 @@ class MainApplication:
         self.counterpart_role_entry = None
         self.evaluation_dates_mode_var = tk.StringVar(value="Una fecha")
         self.evaluation_dates_text_var = tk.StringVar()
+        self.evaluation_multi_picker_var = tk.StringVar(value=datetime.now().strftime("%d/%m/%Y"))
+        self.evaluation_multi_dates = []
+        self.evaluation_multi_dates_label = None
         self.study_dates_mode_var = tk.StringVar(value="Una fecha")
         self.study_dates_text_var = tk.StringVar()
+        self.study_multi_picker_var = tk.StringVar(value=datetime.now().strftime("%d/%m/%Y"))
+        self.study_multi_dates = []
+        self.study_multi_dates_label = None
         self.evaluation_single_date_container = None
         self.evaluation_multi_date_container = None
         self.study_single_date_container = None
@@ -1344,27 +1350,44 @@ class MainApplication:
             border_color=self.colors["field_border"],
         )
         multi_date_wrapper.pack(anchor=tk.W, fill=tk.X)
-        multi_date_entry = self._create_text_entry(
+        picker_row = ctk.CTkFrame(multi_date_wrapper, fg_color="transparent", corner_radius=0)
+        picker_row.pack(fill=tk.X, expand=True, padx=8, pady=(6, 4))
+        picker_date = self._create_date_entry(picker_row, self.evaluation_multi_picker_var, width=16)
+        picker_date.pack(side=tk.LEFT)
+        ctk.CTkButton(
+            picker_row,
+            text="Agregar y siguiente",
+            fg_color=self.colors["primary_muted"],
+            text_color=self.colors["primary"],
+            hover_color="#D4EDDA",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=8,
+            height=30,
+            command=self._add_evaluation_multi_date,
+        ).pack(side=tk.LEFT, padx=(8, 6))
+        ctk.CTkButton(
+            picker_row,
+            text="Quitar última",
+            fg_color="transparent",
+            text_color=self.colors["primary"],
+            border_width=1,
+            border_color=self.colors["primary"],
+            hover_color=self.colors["primary_muted"],
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            corner_radius=8,
+            height=30,
+            command=self._remove_last_evaluation_multi_date,
+        ).pack(side=tk.LEFT)
+        self.evaluation_multi_dates_label = ctk.CTkLabel(
             multi_date_wrapper,
-            self.evaluation_dates_text_var,
-            width=280,
-            placeholder="Ej: 12/03/2026, 13/03/2026 o del 12/03/2026 al 15/03/2026",
-        )
-        multi_date_entry.pack(fill=tk.X, expand=True, padx=8, pady=6)
-        multi_date_error = ctk.CTkLabel(
-            self.evaluation_multi_date_container,
-            text="",
-            font=ctk.CTkFont("Segoe UI", 9),
-            text_color=self.colors["error"],
+            text="Sin fechas seleccionadas.",
+            font=ctk.CTkFont("Segoe UI", 10),
+            text_color=self.colors["text_muted"],
             anchor="w",
+            justify="left",
+            wraplength=560,
         )
-        multi_date_error.pack(anchor=tk.W, pady=(2, 0))
-        self._attach_required_validation(
-            self.evaluation_dates_text_var,
-            multi_date_entry,
-            multi_date_error,
-            "Requerido",
-        )
+        self.evaluation_multi_dates_label.pack(fill=tk.X, padx=8, pady=(2, 8))
 
         if self.evaluation_dates_mode_var.get() not in ("Una fecha", "Varias fechas"):
             self.evaluation_dates_mode_var.set("Una fecha")
@@ -1981,6 +2004,121 @@ class MainApplication:
         except ValueError:
             return False
 
+    def _parse_multi_dates_text(self, raw_text: str) -> list[str]:
+        """Extrae y normaliza fechas dd/MM/yyyy desde texto libre."""
+
+        text = (raw_text or "").strip()
+        if not text:
+            return []
+
+        tokens = re.findall(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{4}\b", text)
+        if not tokens and self._is_single_date_text(text):
+            tokens = [text]
+
+        normalized = []
+        for token in tokens:
+            parsed_date = None
+            for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%m/%d/%Y"):
+                try:
+                    parsed_date = datetime.strptime(token, fmt)
+                    break
+                except ValueError:
+                    continue
+            if parsed_date is None:
+                continue
+
+            value = parsed_date.strftime("%d/%m/%Y")
+            if value not in normalized:
+                normalized.append(value)
+        return normalized
+
+    def _format_multi_dates(self, dates: list[str]) -> str:
+        """Convierte lista de fechas a texto persistible."""
+
+        return ", ".join(dates)
+
+    def _refresh_evaluation_multi_dates_preview(self) -> None:
+        """Actualiza el resumen visible de fechas múltiples de evaluación."""
+
+        if self.evaluation_multi_dates_label is None:
+            return
+        if not self.evaluation_multi_dates:
+            self.evaluation_multi_dates_label.configure(text="Sin fechas seleccionadas.")
+        else:
+            self.evaluation_multi_dates_label.configure(text=" • ".join(self.evaluation_multi_dates))
+
+    def _refresh_study_multi_dates_preview(self) -> None:
+        """Actualiza el resumen visible de fechas múltiples de estudio."""
+
+        if self.study_multi_dates_label is None:
+            return
+        if not self.study_multi_dates:
+            self.study_multi_dates_label.configure(text="Sin fechas seleccionadas.")
+        else:
+            self.study_multi_dates_label.configure(text=" • ".join(self.study_multi_dates))
+
+    def _sync_evaluation_multi_dates_from_text(self) -> None:
+        """Sincroniza lista interna de evaluación con el StringVar persistido."""
+
+        self.evaluation_multi_dates = self._parse_multi_dates_text(self.evaluation_dates_text_var.get())
+        self.evaluation_dates_text_var.set(self._format_multi_dates(self.evaluation_multi_dates))
+        self._refresh_evaluation_multi_dates_preview()
+
+    def _sync_study_multi_dates_from_text(self) -> None:
+        """Sincroniza lista interna de estudio con el StringVar persistido."""
+
+        self.study_multi_dates = self._parse_multi_dates_text(self.study_dates_text_var.get())
+        self.study_dates_text_var.set(self._format_multi_dates(self.study_multi_dates))
+        self._refresh_study_multi_dates_preview()
+
+    def _add_evaluation_multi_date(self) -> None:
+        """Agrega la fecha del calendario de evaluación y avanza al día siguiente."""
+
+        self._normalize_date_var(self.evaluation_multi_picker_var)
+        selected = self.evaluation_multi_picker_var.get().strip()
+        if selected and selected not in self.evaluation_multi_dates:
+            self.evaluation_multi_dates.append(selected)
+            self.evaluation_dates_text_var.set(self._format_multi_dates(self.evaluation_multi_dates))
+            self._refresh_evaluation_multi_dates_preview()
+
+        try:
+            next_day = datetime.strptime(selected, "%d/%m/%Y") + timedelta(days=1)
+            self.evaluation_multi_picker_var.set(next_day.strftime("%d/%m/%Y"))
+        except ValueError:
+            pass
+
+    def _remove_last_evaluation_multi_date(self) -> None:
+        """Quita la última fecha seleccionada de evaluación."""
+
+        if self.evaluation_multi_dates:
+            self.evaluation_multi_dates.pop()
+        self.evaluation_dates_text_var.set(self._format_multi_dates(self.evaluation_multi_dates))
+        self._refresh_evaluation_multi_dates_preview()
+
+    def _add_study_multi_date(self) -> None:
+        """Agrega la fecha del calendario de estudio y avanza al día siguiente."""
+
+        self._normalize_date_var(self.study_multi_picker_var)
+        selected = self.study_multi_picker_var.get().strip()
+        if selected and selected not in self.study_multi_dates:
+            self.study_multi_dates.append(selected)
+            self.study_dates_text_var.set(self._format_multi_dates(self.study_multi_dates))
+            self._refresh_study_multi_dates_preview()
+
+        try:
+            next_day = datetime.strptime(selected, "%d/%m/%Y") + timedelta(days=1)
+            self.study_multi_picker_var.set(next_day.strftime("%d/%m/%Y"))
+        except ValueError:
+            pass
+
+    def _remove_last_study_multi_date(self) -> None:
+        """Quita la última fecha seleccionada de estudio."""
+
+        if self.study_multi_dates:
+            self.study_multi_dates.pop()
+        self.study_dates_text_var.set(self._format_multi_dates(self.study_multi_dates))
+        self._refresh_study_multi_dates_preview()
+
     def _handle_evaluation_date_mode_change(self) -> None:
         """Muestra el campo correcto según el modo de fecha de evaluación."""
 
@@ -1995,6 +2133,7 @@ class MainApplication:
             return
 
         if mode == "Varias fechas":
+            self._sync_evaluation_multi_dates_from_text()
             self.evaluation_multi_date_container.pack(fill=tk.X)
         else:
             self.evaluation_single_date_container.pack(fill=tk.X)
@@ -2013,6 +2152,7 @@ class MainApplication:
             return
 
         if mode == "Varias fechas":
+            self._sync_study_multi_dates_from_text()
             self.study_multi_date_container.pack(fill=tk.X)
         else:
             self.study_single_date_container.pack(fill=tk.X)
@@ -2022,6 +2162,7 @@ class MainApplication:
 
         mode = self.evaluation_dates_mode_var.get()
         if mode == "Varias fechas":
+            self._sync_evaluation_multi_dates_from_text()
             return (self.evaluation_dates_text_var.get() or "").strip()
         self._normalize_date_var(self.date_var)
         return (self.date_var.get() or "").strip()
@@ -2031,6 +2172,7 @@ class MainApplication:
 
         mode = self.study_dates_mode_var.get()
         if mode == "Varias fechas":
+            self._sync_study_multi_dates_from_text()
             return (self.study_dates_text_var.get() or "").strip()
         self._normalize_date_var(self.study_dates_var)
         return (self.study_dates_var.get() or "").strip()
@@ -2274,13 +2416,44 @@ class MainApplication:
                     border_color=self.colors["field_border"],
                 )
                 study_multi_wrapper.pack(anchor=tk.W, fill=tk.X)
-                study_multi_entry = self._create_text_entry(
+                study_picker_row = ctk.CTkFrame(study_multi_wrapper, fg_color="transparent", corner_radius=0)
+                study_picker_row.pack(fill=tk.X, expand=True, padx=8, pady=(6, 4))
+                study_picker_date = self._create_date_entry(study_picker_row, self.study_multi_picker_var, width=16)
+                study_picker_date.pack(side=tk.LEFT)
+                ctk.CTkButton(
+                    study_picker_row,
+                    text="Agregar y siguiente",
+                    fg_color=self.colors["primary_muted"],
+                    text_color=self.colors["primary"],
+                    hover_color="#D4EDDA",
+                    font=ctk.CTkFont("Segoe UI", 10, "bold"),
+                    corner_radius=8,
+                    height=30,
+                    command=self._add_study_multi_date,
+                ).pack(side=tk.LEFT, padx=(8, 6))
+                ctk.CTkButton(
+                    study_picker_row,
+                    text="Quitar última",
+                    fg_color="transparent",
+                    text_color=self.colors["primary"],
+                    border_width=1,
+                    border_color=self.colors["primary"],
+                    hover_color=self.colors["primary_muted"],
+                    font=ctk.CTkFont("Segoe UI", 10, "bold"),
+                    corner_radius=8,
+                    height=30,
+                    command=self._remove_last_study_multi_date,
+                ).pack(side=tk.LEFT)
+                self.study_multi_dates_label = ctk.CTkLabel(
                     study_multi_wrapper,
-                    self.study_dates_text_var,
-                    width=340,
-                    placeholder="Ej: 12/03/2026, 13/03/2026 o del 12/03/2026 al 15/03/2026",
+                    text="Sin fechas seleccionadas.",
+                    font=ctk.CTkFont("Segoe UI", 10),
+                    text_color=self.colors["text_muted"],
+                    anchor="w",
+                    justify="left",
+                    wraplength=560,
                 )
-                study_multi_entry.pack(fill=tk.X, expand=True, padx=8, pady=6)
+                self.study_multi_dates_label.pack(fill=tk.X, padx=8, pady=(2, 8))
 
                 if self.study_dates_mode_var.get() not in ("Una fecha", "Varias fechas"):
                     self.study_dates_mode_var.set("Una fecha")
@@ -4687,6 +4860,12 @@ class MainApplication:
         self.evaluation_dates_text_var.set("")
         self.study_dates_mode_var.set("Una fecha")
         self.study_dates_text_var.set("")
+        self.evaluation_multi_picker_var.set(today)
+        self.study_multi_picker_var.set(today)
+        self.evaluation_multi_dates = []
+        self.study_multi_dates = []
+        self._refresh_evaluation_multi_dates_preview()
+        self._refresh_study_multi_dates_preview()
         self._handle_evaluation_date_mode_change()
         self._handle_study_date_mode_change()
 

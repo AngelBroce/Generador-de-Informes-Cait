@@ -16,8 +16,6 @@ from tkinter import messagebox
 # Agregar la ruta del proyecto al path de Python
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.ui.app import MainApplication
-
 
 def _resolve_log_dir() -> Path:
     """Devuelve la carpeta de logs según modo instalado o desarrollo."""
@@ -75,6 +73,8 @@ def _show_startup_error_dialog(exc: Exception, log_path: Path | None) -> None:
 def main():
     """Punto de entrada principal de la aplicación"""
     try:
+        # Import dentro del bloque protegido para capturar fallos tempranos.
+        from src.ui.app import MainApplication
         app = MainApplication()
         app.run()
     except Exception as e:
