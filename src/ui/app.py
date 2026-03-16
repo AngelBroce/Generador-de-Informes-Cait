@@ -161,6 +161,14 @@ class MainApplication:
         self.counterpart_var = tk.StringVar(value="Sin contraparte")
         self.counterpart_combo = None
         self.counterpart_role_entry = None
+        self.evaluation_dates_mode_var = tk.StringVar(value="Una fecha")
+        self.evaluation_dates_text_var = tk.StringVar()
+        self.study_dates_mode_var = tk.StringVar(value="Una fecha")
+        self.study_dates_text_var = tk.StringVar()
+        self.evaluation_single_date_container = None
+        self.evaluation_multi_date_container = None
+        self.study_single_date_container = None
+        self.study_multi_date_container = None
         
         # Rutas de icono/logo de la aplicación
         runtime_base = Path(getattr(sys, "_MEIPASS", self.project_root))
@@ -1276,8 +1284,25 @@ class MainApplication:
         self._create_pill_label(form, "Fecha de evaluación *").grid(row=date_row, column=0, sticky=tk.W, pady=8)
         date_container = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
         date_container.grid(row=date_row, column=1, sticky="nsew", padx=12, pady=8)
-        date_wrapper = ctk.CTkFrame(
+
+        date_mode_selector = ctk.CTkSegmentedButton(
             date_container,
+            values=["Una fecha", "Varias fechas"],
+            variable=self.evaluation_dates_mode_var,
+            command=lambda _value=None: self._handle_evaluation_date_mode_change(),
+            fg_color=self.colors["field_bg"],
+            selected_color=self.colors["primary"],
+            selected_hover_color=self.colors["primary_dark"],
+            unselected_color=self.colors["field_bg"],
+            unselected_hover_color=self.colors["primary_muted"],
+            text_color=self.colors["text"],
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+        )
+        date_mode_selector.pack(anchor=tk.W, pady=(0, 8))
+
+        self.evaluation_single_date_container = ctk.CTkFrame(date_container, fg_color="transparent", corner_radius=0)
+        date_wrapper = ctk.CTkFrame(
+            self.evaluation_single_date_container,
             fg_color=self.colors["field_bg"],
             corner_radius=10,
             border_width=1,
@@ -1289,7 +1314,7 @@ class MainApplication:
         date_entry = self._create_date_entry(date_wrapper, self.date_var, width=16)
         date_entry.pack(fill=tk.BOTH, expand=True, padx=8, pady=6)
         date_error = ctk.CTkLabel(
-            date_container,
+            self.evaluation_single_date_container,
             text="",
             font=ctk.CTkFont("Segoe UI", 9),
             text_color=self.colors["error"],
@@ -1297,6 +1322,41 @@ class MainApplication:
         )
         date_error.pack(anchor=tk.W, pady=(2, 0))
         self._attach_date_validation(self.date_var, date_wrapper, date_error)
+
+        self.evaluation_multi_date_container = ctk.CTkFrame(date_container, fg_color="transparent", corner_radius=0)
+        multi_date_wrapper = ctk.CTkFrame(
+            self.evaluation_multi_date_container,
+            fg_color=self.colors["field_bg"],
+            corner_radius=10,
+            border_width=1,
+            border_color=self.colors["field_border"],
+        )
+        multi_date_wrapper.pack(anchor=tk.W, fill=tk.X)
+        multi_date_entry = self._create_text_entry(
+            multi_date_wrapper,
+            self.evaluation_dates_text_var,
+            width=280,
+            placeholder="Ej: 12/03/2026, 13/03/2026 o del 12/03/2026 al 15/03/2026",
+        )
+        multi_date_entry.pack(fill=tk.X, expand=True, padx=8, pady=6)
+        multi_date_error = ctk.CTkLabel(
+            self.evaluation_multi_date_container,
+            text="",
+            font=ctk.CTkFont("Segoe UI", 9),
+            text_color=self.colors["error"],
+            anchor="w",
+        )
+        multi_date_error.pack(anchor=tk.W, pady=(2, 0))
+        self._attach_required_validation(
+            self.evaluation_dates_text_var,
+            multi_date_entry,
+            multi_date_error,
+            "Requerido",
+        )
+
+        if self.evaluation_dates_mode_var.get() not in ("Una fecha", "Varias fechas"):
+            self.evaluation_dates_mode_var.set("Una fecha")
+        self._handle_evaluation_date_mode_change()
 
         self._reload_evaluators()
         self._reload_counterparts()
@@ -1900,6 +1960,69 @@ class MainApplication:
 
         text_var.set(parsed_date.strftime("%d/%m/%Y"))
 
+    def _is_single_date_text(self, value: str) -> bool:
+        """Valida si un texto coincide exactamente con el formato dd/MM/yyyy."""
+
+        try:
+            datetime.strptime((value or "").strip(), "%d/%m/%Y")
+            return True
+        except ValueError:
+            return False
+
+    def _handle_evaluation_date_mode_change(self) -> None:
+        """Muestra el campo correcto según el modo de fecha de evaluación."""
+
+        if self.evaluation_single_date_container is None or self.evaluation_multi_date_container is None:
+            return
+
+        mode = self.evaluation_dates_mode_var.get()
+        try:
+            self.evaluation_single_date_container.pack_forget()
+            self.evaluation_multi_date_container.pack_forget()
+        except tk.TclError:
+            return
+
+        if mode == "Varias fechas":
+            self.evaluation_multi_date_container.pack(fill=tk.X)
+        else:
+            self.evaluation_single_date_container.pack(fill=tk.X)
+
+    def _handle_study_date_mode_change(self) -> None:
+        """Muestra el campo correcto según el modo de fechas del estudio."""
+
+        if self.study_single_date_container is None or self.study_multi_date_container is None:
+            return
+
+        mode = self.study_dates_mode_var.get()
+        try:
+            self.study_single_date_container.pack_forget()
+            self.study_multi_date_container.pack_forget()
+        except tk.TclError:
+            return
+
+        if mode == "Varias fechas":
+            self.study_multi_date_container.pack(fill=tk.X)
+        else:
+            self.study_single_date_container.pack(fill=tk.X)
+
+    def _get_evaluation_dates_value(self) -> str:
+        """Obtiene la fecha de evaluación según el modo seleccionado."""
+
+        mode = self.evaluation_dates_mode_var.get()
+        if mode == "Varias fechas":
+            return (self.evaluation_dates_text_var.get() or "").strip()
+        self._normalize_date_var(self.date_var)
+        return (self.date_var.get() or "").strip()
+
+    def _get_study_dates_value(self) -> str:
+        """Obtiene las fechas del estudio según el modo seleccionado."""
+
+        mode = self.study_dates_mode_var.get()
+        if mode == "Varias fechas":
+            return (self.study_dates_text_var.get() or "").strip()
+        self._normalize_date_var(self.study_dates_var)
+        return (self.study_dates_var.get() or "").strip()
+
     def _validate_date_input(self, proposed: str) -> bool:
         """Valida la escritura del usuario para permitir solo números, '/' y longitud esperada."""
 
@@ -2094,22 +2217,62 @@ class MainApplication:
             ("Planta evaluada:", self.plant_var, "entry"),
             ("Actividad principal:", self.activity_var, "entry"),
             ("País en que se realizó:", self.country_var, "entry"),
-            ("Fechas del estudio:", self.study_dates_var, "date"),
+            ("Fechas del estudio:", self.study_dates_var, "study_date"),
         ]
 
         for idx, (label_text, var, field_type) in enumerate(field_specs):
             self._create_pill_label(fields_frame, label_text).grid(row=idx, column=0, sticky=tk.W, pady=8)
-            if field_type == "date":
-                date_wrapper = ctk.CTkFrame(
-                    fields_frame,
+            if field_type == "study_date":
+                date_container = ctk.CTkFrame(fields_frame, fg_color="transparent", corner_radius=0)
+                date_container.grid(row=idx, column=1, sticky=tk.EW, padx=12, pady=8)
+
+                study_mode_selector = ctk.CTkSegmentedButton(
+                    date_container,
+                    values=["Una fecha", "Varias fechas"],
+                    variable=self.study_dates_mode_var,
+                    command=lambda _value=None: self._handle_study_date_mode_change(),
+                    fg_color=self.colors["field_bg"],
+                    selected_color=self.colors["primary"],
+                    selected_hover_color=self.colors["primary_dark"],
+                    unselected_color=self.colors["field_bg"],
+                    unselected_hover_color=self.colors["primary_muted"],
+                    text_color=self.colors["text"],
+                    font=ctk.CTkFont("Segoe UI", 10, "bold"),
+                )
+                study_mode_selector.pack(anchor=tk.W, pady=(0, 8))
+
+                self.study_single_date_container = ctk.CTkFrame(date_container, fg_color="transparent", corner_radius=0)
+                study_date_wrapper = ctk.CTkFrame(
+                    self.study_single_date_container,
                     fg_color=self.colors["field_bg"],
                     corner_radius=10,
                     border_width=1,
                     border_color=self.colors["field_border"],
                 )
-                date_wrapper.grid(row=idx, column=1, sticky=tk.EW, padx=12, pady=8)
-                widget = self._create_date_entry(date_wrapper, var, width=16)
+                study_date_wrapper.pack(anchor=tk.W, fill=tk.X)
+                widget = self._create_date_entry(study_date_wrapper, var, width=16)
                 widget.pack(fill=tk.X, expand=True, padx=8, pady=6)
+
+                self.study_multi_date_container = ctk.CTkFrame(date_container, fg_color="transparent", corner_radius=0)
+                study_multi_wrapper = ctk.CTkFrame(
+                    self.study_multi_date_container,
+                    fg_color=self.colors["field_bg"],
+                    corner_radius=10,
+                    border_width=1,
+                    border_color=self.colors["field_border"],
+                )
+                study_multi_wrapper.pack(anchor=tk.W, fill=tk.X)
+                study_multi_entry = self._create_text_entry(
+                    study_multi_wrapper,
+                    self.study_dates_text_var,
+                    width=340,
+                    placeholder="Ej: 12/03/2026, 13/03/2026 o del 12/03/2026 al 15/03/2026",
+                )
+                study_multi_entry.pack(fill=tk.X, expand=True, padx=8, pady=6)
+
+                if self.study_dates_mode_var.get() not in ("Una fecha", "Varias fechas"):
+                    self.study_dates_mode_var.set("Una fecha")
+                self._handle_study_date_mode_change()
             else:
                 self._create_text_entry(fields_frame, var, width=340).grid(
                     row=idx, column=1, sticky=tk.EW, padx=12, pady=8
@@ -3795,11 +3958,8 @@ class MainApplication:
         company_counterpart = self.company_counterpart_var.get().strip()
         counterpart_role = self.counterpart_role_var.get().strip()
         country = self.country_var.get().strip()
-        study_dates = self.study_dates_var.get().strip()
-
-        self._normalize_date_var(self.date_var)
-        self._normalize_date_var(self.study_dates_var)
-        study_dates = self.study_dates_var.get()
+        evaluation_dates = self._get_evaluation_dates_value()
+        study_dates = self._get_study_dates_value()
 
         is_combined_report = self._is_combined_report_type(report_type)
         
@@ -3807,6 +3967,13 @@ class MainApplication:
             messagebox.showwarning(
                 "Campos incompletos",
                 "Por favor completa: Empresa, Ubicación y Evaluador",
+            )
+            return False
+
+        if not evaluation_dates:
+            messagebox.showwarning(
+                "Fecha requerida",
+                "Debes ingresar la fecha de evaluación.",
             )
             return False
 
@@ -3839,7 +4006,7 @@ class MainApplication:
             plant = location
 
         if not study_dates:
-            study_dates = self.date_var.get().strip()
+            study_dates = evaluation_dates
 
         conclusion_text = self._get_conclusion_text()
         recommendations_text = self._get_recommendations_text()
@@ -3883,7 +4050,7 @@ class MainApplication:
             "company": company,
             "location": location,
             "evaluator": evaluator_profile.get("name", evaluator) if evaluator_profile else evaluator,
-            "date": self.date_var.get(),
+            "date": evaluation_dates,
             "plant": plant,
             "activity": activity,
             "company_counterpart": company_counterpart,
@@ -4173,13 +4340,17 @@ class MainApplication:
             "report_type": self.report_type_var.get(),
             "company": self.company_var.get(),
             "location": self.location_var.get(),
-            "date": self.date_var.get(),
+            "date": self._get_evaluation_dates_value(),
+            "evaluation_dates_mode": self.evaluation_dates_mode_var.get(),
+            "evaluation_dates_text": self.evaluation_dates_text_var.get(),
             "plant": self.plant_var.get(),
             "activity": self.activity_var.get(),
             "company_counterpart": self.company_counterpart_var.get(),
             "counterpart_role": self.counterpart_role_var.get(),
             "country": self.country_var.get(),
-            "study_dates": self.study_dates_var.get(),
+            "study_dates": self._get_study_dates_value(),
+            "study_dates_mode": self.study_dates_mode_var.get(),
+            "study_dates_text": self.study_dates_text_var.get(),
             "selected_evaluator_id": self.selected_evaluator_id.get(),
             "evaluator_name": self.evaluator_var.get(),
             "selected_audio_evaluator_id": self.selected_audio_evaluator_id.get(),
@@ -4199,16 +4370,42 @@ class MainApplication:
     def _apply_report_state(self, state: dict) -> None:
         """Restaura el estado completo del formulario desde un borrador."""
 
+        today = datetime.now().strftime("%d/%m/%Y")
         self.report_type_var.set(state.get("report_type", "audiometría"))
         self.company_var.set(state.get("company", ""))
         self.location_var.set(state.get("location", ""))
-        self.date_var.set(state.get("date", datetime.now().strftime("%d/%m/%Y")))
+
+        saved_date = (state.get("date") or "").strip()
+        eval_mode = state.get("evaluation_dates_mode")
+        if eval_mode not in ("Una fecha", "Varias fechas"):
+            eval_mode = "Una fecha" if self._is_single_date_text(saved_date) else "Varias fechas"
+        self.evaluation_dates_mode_var.set(eval_mode)
+        self.evaluation_dates_text_var.set((state.get("evaluation_dates_text") or "").strip())
+        if eval_mode == "Una fecha":
+            self.date_var.set(saved_date if self._is_single_date_text(saved_date) else today)
+        else:
+            self.date_var.set(today)
+            if not self.evaluation_dates_text_var.get() and saved_date:
+                self.evaluation_dates_text_var.set(saved_date)
+
         self.plant_var.set(state.get("plant", ""))
         self.activity_var.set(state.get("activity", ""))
         self.company_counterpart_var.set(state.get("company_counterpart", ""))
         self.counterpart_role_var.set(state.get("counterpart_role", ""))
         self.country_var.set(state.get("country", ""))
-        self.study_dates_var.set(state.get("study_dates", self.date_var.get()))
+
+        saved_study_dates = (state.get("study_dates") or "").strip()
+        study_mode = state.get("study_dates_mode")
+        if study_mode not in ("Una fecha", "Varias fechas"):
+            study_mode = "Una fecha" if self._is_single_date_text(saved_study_dates) else "Varias fechas"
+        self.study_dates_mode_var.set(study_mode)
+        self.study_dates_text_var.set((state.get("study_dates_text") or "").strip())
+        if study_mode == "Una fecha":
+            self.study_dates_var.set(saved_study_dates if self._is_single_date_text(saved_study_dates) else self.date_var.get())
+        else:
+            self.study_dates_var.set(self.date_var.get())
+            if not self.study_dates_text_var.get() and saved_study_dates:
+                self.study_dates_text_var.set(saved_study_dates)
 
         self.evaluated_entries = {key: [] for key in RESULT_SCHEMES}
         for key, entries in (state.get("evaluated_entries") or {}).items():
@@ -4235,6 +4432,9 @@ class MainApplication:
             self.audio_evaluator_var.set((state.get("audio_evaluator_name") or "").strip())
         if state.get("spiro_evaluator_name"):
             self.spiro_evaluator_var.set((state.get("spiro_evaluator_name") or "").strip())
+
+        self._handle_evaluation_date_mode_change()
+        self._handle_study_date_mode_change()
         self._reload_combined_evaluator_combos()
 
         counterpart_id = state.get("selected_counterpart_id")
@@ -4471,6 +4671,12 @@ class MainApplication:
 
         self.date_var.set(today)
         self.study_dates_var.set(today)
+        self.evaluation_dates_mode_var.set("Una fecha")
+        self.evaluation_dates_text_var.set("")
+        self.study_dates_mode_var.set("Una fecha")
+        self.study_dates_text_var.set("")
+        self._handle_evaluation_date_mode_change()
+        self._handle_study_date_mode_change()
 
         self.selected_evaluator_id.set("")
         self.evaluator_var.set("")

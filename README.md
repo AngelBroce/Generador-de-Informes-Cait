@@ -11,6 +11,7 @@ Esta aplicación permite a profesionales de salud del Centro de Atención Integr
 ✅ Crear y editar informes de audiometría y espirometría  
 ✅ Cargar logo de la empresa  
 ✅ Registrar datos de personas evaluadas  
+✅ Elegir una o varias fechas en evaluación y en estudio  
 ✅ Adjuntar documentos relacionados (PDF)  
 ✅ Generar informes en PDF con logo de fondo opaco  
 ✅ Exportar paquetes ZIP con informe y anexos  
@@ -67,14 +68,16 @@ python main.py
 
 ## Descarga de la aplicación
 
-Puedes descargar la aplicación lista para usar desde el instalador oficial (Setup):
+Puedes descargar la aplicación desde la página de releases:
 
-- https://github.com/AngelBroce/Generador-de-Informes-Cait/releases/download/v1.0.5/CAIT_Informes_Setup.exe
+- https://github.com/AngelBroce/Generador-de-Informes-Cait/releases
 
-Instalación rápida:
-1. Descarga `CAIT_Informes_Setup.exe`.
-2. Ejecuta el instalador y sigue el asistente.
-3. Abre **CAIT Informes** desde el acceso directo creado.
+En cada release se publican estos archivos:
+1. `CAIT_Informes_Setup_vX.Y.Z.exe` (instalador)
+2. `CAIT_Informes_Portable_vX.Y.Z.zip` (portable)
+3. `SHA256SUMS.txt` (verificación de integridad)
+
+Para reducir bloqueos del navegador, usa preferiblemente el archivo portable `.zip` y valida el hash SHA-256.
 
 ### Flujo de trabajo
 1. **Crear informe**: Selecciona tipo, completa empresa, ubicación y evaluador
@@ -102,6 +105,7 @@ Instaladas desde [requirements.txt](requirements.txt):
 - [scripts/demo_export_zip.py](scripts/demo_export_zip.py): genera un ZIP de ejemplo con anexos y certificados.
 - [scripts/generate_long_pdf.py](scripts/generate_long_pdf.py): crea un PDF extenso de demostración.
 - [scripts/generate_protocol_test_pdf.py](scripts/generate_protocol_test_pdf.py): prueba el orden de anexos del protocolo.
+- [scripts/prepare_release_assets.bat](scripts/prepare_release_assets.bat): prepara assets para GitHub Releases (Setup, ZIP portable y SHA256).
 
 ## Pruebas
 
