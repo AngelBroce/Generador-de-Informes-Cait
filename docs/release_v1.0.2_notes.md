@@ -58,3 +58,13 @@ Actualización:
 1) Cerrar CAIT Informes.
 2) Instalar `CAIT_Informes_Setup_v1.0.7.exe` o usar `CAIT_Informes_Portable_v1.0.7.zip`.
 3) Verificar en Presentación del informe el selector de fechas y que el contenido llega hasta abajo.
+
+v1.0.8 - Hotfix de arranque.
+
+- Corregido un cierre inmediato al iniciar la aplicación instalado por Setup.
+- Ajustada la compatibilidad del campo de texto para versiones de customtkinter sin `placeholder_text`.
+
+Actualización:
+1) Desinstalar la versión que no abre (si aplica).
+2) Instalar `CAIT_Informes_Setup_v1.0.8.exe`.
+3) Abrir la app y confirmar inicio normal.

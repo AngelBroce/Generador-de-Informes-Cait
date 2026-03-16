@@ -469,23 +469,37 @@ class MainApplication:
             font=ctk.CTkFont("Segoe UI", 12, "bold"),
         )
 
-    def _create_text_entry(self, parent, text_var: tk.StringVar, width: int = 260):
+    def _create_text_entry(
+        self,
+        parent,
+        text_var: tk.StringVar,
+        width: int = 260,
+        placeholder: str | None = None,
+    ):
         """Campo de entrada con estilo moderno."""
 
         width = self._responsive_field_width(width)
 
-        return ctk.CTkEntry(
-            parent,
-            textvariable=text_var,
-            width=width,
-            height=36,
-            corner_radius=10,
-            border_width=1,
-            border_color=self.colors["field_border"],
-            fg_color=self.colors["field_bg"],
-            text_color=self.colors["text"],
-            font=ctk.CTkFont("Segoe UI", 13),
-        )
+        entry_kwargs = {
+            "textvariable": text_var,
+            "width": width,
+            "height": 36,
+            "corner_radius": 10,
+            "border_width": 1,
+            "border_color": self.colors["field_border"],
+            "fg_color": self.colors["field_bg"],
+            "text_color": self.colors["text"],
+            "font": ctk.CTkFont("Segoe UI", 13),
+        }
+        if placeholder:
+            entry_kwargs["placeholder_text"] = placeholder
+
+        try:
+            return ctk.CTkEntry(parent, **entry_kwargs)
+        except TypeError:
+            # Compatibilidad con versiones de customtkinter sin placeholder_text.
+            entry_kwargs.pop("placeholder_text", None)
+            return ctk.CTkEntry(parent, **entry_kwargs)
 
     def _create_combo(self, parent, text_var: tk.StringVar, values: list[str], command=None, width: int = 260):
         """Combo con estilo alineado a la interfaz."""
