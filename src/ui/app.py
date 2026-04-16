@@ -231,7 +231,8 @@ class MainApplication:
     def _initialize_responsive_behavior(self):
         """Inicializa listeners y aplica perfil responsive inicial."""
 
-        self.root.bind("<Configure>", self._on_root_configure)
+        # Se desactiva la recarga dinámica para evitar distorsión al achicar.
+        # self.root.bind("<Configure>", self._on_root_configure)
         self._apply_responsive_layout(force=True)
 
     def _on_root_configure(self, event):
