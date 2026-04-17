@@ -8,7 +8,7 @@ if exist "%ROOT%\VERSION" (
   set /p APP_VERSION=<"%ROOT%\VERSION"
 )
 if "%APP_VERSION%"=="" (
-  set "APP_VERSION=1.0.8"
+  set "APP_VERSION=1.0.9"
 )
 
 set "PYTHON_EXE=%ROOT%\.venv\Scripts\python.exe"
