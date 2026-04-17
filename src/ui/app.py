@@ -829,7 +829,7 @@ class MainApplication:
             print(f"No se pudo cargar el logo: {e}")
 
         text_frame = ctk.CTkFrame(header_content, fg_color=primary, corner_radius=0)
-        text_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        text_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 6))
 
         title_label = ctk.CTkLabel(
             text_frame,
@@ -849,49 +849,57 @@ class MainApplication:
         )
         subtitle_label.pack(anchor=tk.W)
 
+        # Frame de botones agrupados en la derecha con ancho reservado
+        header_btns_frame = ctk.CTkFrame(header_content, fg_color="transparent", corner_radius=0)
+        header_btns_frame.pack(side=tk.RIGHT, padx=(8, 0), fill=tk.Y)
+
         help_button = ctk.CTkButton(
-            header_content,
+            header_btns_frame,
             text="Ayuda",
             fg_color="transparent",
             hover_color="#1F8543",
             text_color=surface,
             border_width=1,
             border_color="#2B8B4F",
-            font=ctk.CTkFont("Segoe UI", 11, "bold"),
-            height=32,
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            height=30,
+            width=68,
             corner_radius=8,
         )
-        help_button.pack(side=tk.RIGHT)
-        
+        help_button.pack(side=tk.RIGHT, padx=(6, 0))
+
         counterparts_btn = ctk.CTkButton(
-            header_content,
+            header_btns_frame,
             text="👔 Contrapartes",
             fg_color="transparent",
             hover_color="#1F8543",
             text_color=surface,
             border_width=1,
             border_color="#2B8B4F",
-            font=ctk.CTkFont("Segoe UI", 11, "bold"),
-            height=32,
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            height=30,
+            width=130,
             corner_radius=8,
             command=self._open_counterparts_management_window
         )
-        counterparts_btn.pack(side=tk.RIGHT, padx=(0, 10))
+        counterparts_btn.pack(side=tk.RIGHT, padx=(6, 0))
 
         evaluators_btn = ctk.CTkButton(
-            header_content,
-            text="👨‍⚕️ Evaluadores",
+            header_btns_frame,
+            text="👨\u200d⚕️ Evaluadores",
             fg_color="transparent",
             hover_color="#1F8543",
             text_color=surface,
             border_width=1,
             border_color="#2B8B4F",
-            font=ctk.CTkFont("Segoe UI", 11, "bold"),
-            height=32,
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            height=30,
+            width=130,
             corner_radius=8,
             command=self._open_evaluators_management_window
         )
-        evaluators_btn.pack(side=tk.RIGHT, padx=(0, 10))
+        evaluators_btn.pack(side=tk.RIGHT, padx=(0, 0))
+
         self._attach_tooltip(
             help_button,
             "Crear informe genera solo el PDF. Exportar ZIP guarda el PDF y todos los adjuntos, "
