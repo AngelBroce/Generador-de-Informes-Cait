@@ -231,8 +231,7 @@ class MainApplication:
     def _initialize_responsive_behavior(self):
         """Inicializa listeners y aplica perfil responsive inicial."""
 
-        # Se desactiva la recarga dinámica para evitar distorsión al achicar.
-        # self.root.bind("<Configure>", self._on_root_configure)
+        self.root.bind("<Configure>", self._on_root_configure)
         self._apply_responsive_layout(force=True)
 
     def _on_root_configure(self, event):
@@ -274,26 +273,25 @@ class MainApplication:
             self._set_section_buttons_compact(compact=False)
 
     def _set_actions_header_layout(self, compact: bool):
-        """Reordena los botones de acciones para evitar recortes horizontales."""
+        """Reordena los botones de acciones según modo de pantalla."""
 
         if not self.actions_title_label or not self.actions_buttons_frame:
             return
 
-        self.actions_title_label.pack_forget()
-        self.actions_buttons_frame.pack_forget()
-
         if compact:
-            self.actions_title_label.pack(anchor=tk.W, fill=tk.X)
-            self.actions_buttons_frame.pack(fill=tk.X, pady=(8, 0))
+            # El título va arriba, los botones debajo en stack vertical
+            self.actions_title_label.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 6))
+            self.actions_buttons_frame.grid(row=1, column=0, columnspan=2, sticky=tk.EW)
             for btn in self.action_buttons:
                 btn.pack_forget()
-                btn.pack(fill=tk.X, pady=(0, 6))
+                btn.pack(side=tk.LEFT, padx=3, fill=tk.X, expand=True)
         else:
-            self.actions_title_label.pack(side=tk.LEFT)
-            self.actions_buttons_frame.pack(side=tk.RIGHT)
+            # Título a la izquierda, botones a la derecha en la misma fila
+            self.actions_title_label.grid(row=0, column=0, sticky=tk.W, padx=(0, 16))
+            self.actions_buttons_frame.grid(row=0, column=1, sticky=tk.E)
             for btn in self.action_buttons:
                 btn.pack_forget()
-                btn.pack(side=tk.LEFT, padx=6)
+                btn.pack(side=tk.LEFT, padx=4)
 
     def _set_section_buttons_compact(self, compact: bool):
         """Ajusta tamaño de botones del menú lateral según modo."""
@@ -312,21 +310,29 @@ class MainApplication:
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
 
+        # Adaptado para distintas resoluciones de pantalla
         if screen_width <= 1366 or screen_height <= 768:
-            widget_scaling = 1.34
-            window_scaling = 1.14
+            # Laptops pequeñas y HD
+            widget_scaling = 1.45
+            window_scaling = 1.15
         elif screen_width <= 1536 or screen_height <= 900:
-            widget_scaling = 1.28
+            # Laptops medianas (FHD pequeño)
+            widget_scaling = 1.40
+            window_scaling = 1.12
+        elif screen_width <= 1920 or screen_height <= 1080:
+            # Full HD estándar
+            widget_scaling = 1.35
             window_scaling = 1.10
         else:
-            widget_scaling = 1.25
-            window_scaling = 1.1
+            # QHD / 4K
+            widget_scaling = 1.30
+            window_scaling = 1.08
 
-        default_width = min(1500, max(980, int(screen_width * 0.94)))
-        default_height = min(980, max(700, int(screen_height * 0.90)))
+        default_width = min(1600, max(1024, int(screen_width * 0.92)))
+        default_height = min(1020, max(720, int(screen_height * 0.88)))
 
-        min_width = max(760, min(980, int(screen_width * 0.62)))
-        min_height = max(560, min(720, int(screen_height * 0.64)))
+        min_width = max(800, int(screen_width * 0.55))
+        min_height = max(580, int(screen_height * 0.58))
 
         return (
             widget_scaling,
@@ -342,8 +348,8 @@ class MainApplication:
         style = ttk.Style(self.root)
         style.theme_use("clam")
 
-        # Fuente base mayor para mejorar accesibilidad visual sin alterar la estructura.
-        style.configure(".", font=("Segoe UI", 12))
+        # Fuente base mayor para accesibilidad visual.
+        style.configure(".", font=("Segoe UI", 13))
 
         bg = self.colors["bg"]
         surface = self.colors["surface"]
@@ -361,20 +367,20 @@ class MainApplication:
             "Header.TLabel",
             background=primary,
             foreground=surface,
-            font=("Segoe UI", 23, "bold"),
+            font=("Segoe UI", 24, "bold"),
         )
-        style.configure("Title.TLabel", font=("Segoe UI", 19, "bold"), foreground=primary)
+        style.configure("Title.TLabel", font=("Segoe UI", 20, "bold"), foreground=primary)
         style.configure("Subtitle.TLabel", font=("Segoe UI", 14), foreground=muted)
         style.configure("TLabel", background=surface, foreground=text)
 
-        style.configure("Action.TButton", font=("Segoe UI", 12, "bold"), padding=7)
+        style.configure("Action.TButton", font=("Segoe UI", 13, "bold"), padding=9)
         style.map(
             "Action.TButton",
             background=[("pressed", primary_dark), ("active", primary)],
             foreground=[("active", surface)],
         )
 
-        style.configure("Primary.TButton", font=("Segoe UI", 12, "bold"), padding=7)
+        style.configure("Primary.TButton", font=("Segoe UI", 13, "bold"), padding=9)
         style.map(
             "Primary.TButton",
             background=[("pressed", primary_dark), ("active", primary)],
@@ -383,8 +389,8 @@ class MainApplication:
 
         style.configure(
             "Menu.TButton",
-            font=("Segoe UI", 12),
-            padding=9,
+            font=("Segoe UI", 13),
+            padding=11,
             background=surface,
             foreground=primary,
         )
@@ -392,8 +398,8 @@ class MainApplication:
 
         style.configure(
             "MenuActive.TButton",
-            font=("Segoe UI", 12, "bold"),
-            padding=9,
+            font=("Segoe UI", 13, "bold"),
+            padding=11,
             background=primary,
             foreground=surface,
         )
@@ -409,21 +415,22 @@ class MainApplication:
             bordercolor=border,
             lightcolor=border,
             darkcolor=border,
-            rowheight=28,
+            rowheight=34,
+            font=("Segoe UI", 13),
         )
         style.configure(
             "Treeview.Heading",
             background=primary_muted,
             foreground=primary,
-            font=("Segoe UI", 12, "bold"),
+            font=("Segoe UI", 13, "bold"),
         )
         style.map(
             "Treeview",
             background=[("selected", primary)],
             foreground=[("selected", surface)],
         )
-        style.configure("TEntry", fieldbackground=field_bg, padding=6)
-        style.configure("TCombobox", padding=6)
+        style.configure("TEntry", fieldbackground=field_bg, padding=8, font=("Segoe UI", 13))
+        style.configure("TCombobox", padding=8, font=("Segoe UI", 13))
 
     def _create_card(self, parent, padding: int = 16):
         """Crea una tarjeta con bordes suaves y contenido interno."""
@@ -898,6 +905,8 @@ class MainApplication:
 
         actions_header = ctk.CTkFrame(content_frame, fg_color=self.colors["bg"], corner_radius=0)
         actions_header.pack(fill=tk.X, pady=(0, 6))
+        actions_header.columnconfigure(0, weight=0)
+        actions_header.columnconfigure(1, weight=1)
         self.actions_header = actions_header
 
         actions_title = ctk.CTkLabel(
@@ -906,11 +915,11 @@ class MainApplication:
             font=ctk.CTkFont("Segoe UI", 14, "bold"),
             text_color=text,
         )
-        actions_title.pack(side=tk.LEFT)
+        actions_title.grid(row=0, column=0, sticky=tk.W, padx=(0, 16))
         self.actions_title_label = actions_title
 
         right_buttons = ctk.CTkFrame(actions_header, fg_color=self.colors["bg"], corner_radius=0)
-        right_buttons.pack(side=tk.RIGHT)
+        right_buttons.grid(row=0, column=1, sticky=tk.E)
         self.actions_buttons_frame = right_buttons
 
         self.action_buttons = []
@@ -924,28 +933,30 @@ class MainApplication:
             font=ctk.CTkFont("Segoe UI", 11, "bold"),
             corner_radius=10,
             height=36,
+            width=130,
             command=self._reset_form_state,
         )
-        new_report_btn.pack(side=tk.LEFT, padx=6)
+        new_report_btn.pack(side=tk.LEFT, padx=4)
         self.action_buttons.append(new_report_btn)
 
         save_draft_btn = ctk.CTkButton(
             right_buttons,
-            text="Guardar borrador",
+            text="💾 Guardar borrador",
             fg_color=primary_muted,
             text_color=primary,
             hover_color="#D4EDDA",
             font=ctk.CTkFont("Segoe UI", 11, "bold"),
             corner_radius=10,
             height=36,
+            width=150,
             command=self.save_report_draft,
         )
-        save_draft_btn.pack(side=tk.LEFT, padx=6)
+        save_draft_btn.pack(side=tk.LEFT, padx=4)
         self.action_buttons.append(save_draft_btn)
 
         load_draft_btn = ctk.CTkButton(
             right_buttons,
-            text="Cargar borrador",
+            text="📂 Cargar borrador",
             fg_color="transparent",
             text_color=primary,
             border_width=2,
@@ -954,23 +965,25 @@ class MainApplication:
             font=ctk.CTkFont("Segoe UI", 11, "bold"),
             corner_radius=10,
             height=36,
+            width=150,
             command=self.load_report_draft,
         )
-        load_draft_btn.pack(side=tk.LEFT, padx=6)
+        load_draft_btn.pack(side=tk.LEFT, padx=4)
         self.action_buttons.append(load_draft_btn)
 
         export_zip_btn = ctk.CTkButton(
             right_buttons,
-            text="Exportar ZIP",
+            text="📦 Exportar ZIP",
             fg_color=primary,
             text_color=surface,
             hover_color=primary_dark,
             font=ctk.CTkFont("Segoe UI", 11, "bold"),
             corner_radius=10,
             height=36,
+            width=130,
             command=self.export_zip,
         )
-        export_zip_btn.pack(side=tk.LEFT, padx=6)
+        export_zip_btn.pack(side=tk.LEFT, padx=4)
         self.action_buttons.append(export_zip_btn)
 
         ttk.Separator(content_frame, orient="horizontal").pack(fill=tk.X, pady=8)
