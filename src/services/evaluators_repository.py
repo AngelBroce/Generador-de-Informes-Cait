@@ -114,6 +114,16 @@ class EvaluatorRepository:
     def _ensure_storage(self) -> None:
         if not self.db_path.exists():
             self.save_all(DEFAULT_EVALUATORS)
+            return
+        # Verificar que la Licda. Yara siempre esté en el catálogo
+        entries = self.load_all()
+        yara_id = "yara-lizeth-perez"
+        has_yara = any(e.get("id") == yara_id for e in entries)
+        if not has_yara:
+            yara_default = next((e for e in DEFAULT_EVALUATORS if e.get("id") == yara_id), None)
+            if yara_default:
+                entries.insert(0, yara_default)
+                self.save_all(entries)
 
     def load_all(self) -> List[Dict]:
         try:
@@ -200,9 +210,13 @@ class EvaluatorRepository:
         return updated_entry
 
     def remove_evaluator(self, evaluator_id: str) -> bool:
-        """Elimina un evaluador del catálogo."""
+        """Elimina un evaluador del catálogo. La Licda. Yara no puede ser eliminada."""
 
         if not evaluator_id:
+            return False
+
+        # Protección permanente: la Licda. Yara es evaluadora principal
+        if evaluator_id == "yara-lizeth-perez":
             return False
 
         entries = self.load_all()

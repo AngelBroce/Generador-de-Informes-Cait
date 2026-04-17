@@ -1215,6 +1215,21 @@ class MainApplication:
         )
         self.evaluator_combo.grid(row=3, column=1, sticky="nsew", padx=12, pady=8)
 
+        # Etiqueta de solo lectura que reemplaza el combo en modo combinado
+        self._evaluator_combined_label = ctk.CTkLabel(
+            form,
+            text="Licda. Yara Lizeth Pérez A.  (Principal – no editable)",
+            font=ctk.CTkFont("Segoe UI", 12),
+            text_color=self.colors["text_muted"],
+            fg_color=self.colors["field_bg"],
+            corner_radius=10,
+            anchor="w",
+            height=36,
+        )
+        # Se coloca en la misma celda que el combo pero arranca oculto
+        self._evaluator_combined_label.grid(row=3, column=1, sticky="nsew", padx=12, pady=8)
+        self._evaluator_combined_label.grid_remove()
+
         evaluator_actions = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
         if compact_layout:
             evaluator_actions.grid(row=evaluator_actions_row, column=1, sticky=tk.W, padx=12, pady=(0, 8))
@@ -1757,6 +1772,14 @@ class MainApplication:
         evaluator_id = self._resolve_evaluator_id_from_selection()
         if not evaluator_id:
             messagebox.showinfo("Sin seleccion", "Selecciona un evaluador para eliminarlo.")
+            return
+
+        # La Licda. Yara es evaluador principal y no se puede eliminar
+        if evaluator_id == "yara-lizeth-perez":
+            messagebox.showwarning(
+                "Evaluador protegido",
+                "La Licda. Yara Lizeth Pérez es la evaluadora principal y no puede ser eliminada.",
+            )
             return
 
         profile = self.evaluator_profiles.get(evaluator_id, {})
@@ -2389,13 +2412,32 @@ class MainApplication:
             return
 
         if is_combined:
-            self.combined_evaluators_container.grid()
+            # Ocultar el combo principal y mostrar etiqueta fija con Yara
             if self.evaluator_combo is not None:
-                self.evaluator_combo.configure(state="disabled")
+                self.evaluator_combo.grid_remove()
+            if hasattr(self, "_evaluator_combined_label") and self.evaluator_combo is not None:
+                try:
+                    grid_info = self.evaluator_combo.grid_info()
+                    self._evaluator_combined_label.grid(
+                        row=grid_info.get("row", 3),
+                        column=grid_info.get("column", 1),
+                        sticky="nsew",
+                        padx=12,
+                        pady=8,
+                    )
+                except Exception:
+                    pass
+            if hasattr(self, "_evaluator_combined_label"):
+                self._evaluator_combined_label.grid()
+            self.combined_evaluators_container.grid()
             self._reload_combined_evaluator_combos()
         else:
+            # Restaurar el combo principal
             self.combined_evaluators_container.grid_remove()
+            if hasattr(self, "_evaluator_combined_label"):
+                self._evaluator_combined_label.grid_remove()
             if self.evaluator_combo is not None:
+                self.evaluator_combo.grid()
                 self.evaluator_combo.configure(state="readonly")
 
     def _build_content_section(self):
@@ -2712,6 +2754,14 @@ class MainApplication:
             return
         evaluator_id = selected[0]
 
+        # La Licda. Yara es evaluador principal y no se puede eliminar
+        if evaluator_id == "yara-lizeth-perez":
+            messagebox.showwarning(
+                "Evaluador protegido",
+                "La Licda. Yara Lizeth Pérez es la evaluadora principal y no puede ser eliminada del catálogo.",
+            )
+            return
+
         profile = self.evaluator_profiles.get(evaluator_id, {})
         name = profile.get("name", "evaluador")
         confirm = messagebox.askyesno(
@@ -2746,7 +2796,7 @@ class MainApplication:
         fields_frame.grid_columnconfigure(1, weight=1)
 
         field_specs = [
-            ("Planta evaluada:", self.plant_var, "entry"),
+            ("Área evaluada:", self.plant_var, "entry"),
             ("Actividad principal:", self.activity_var, "entry"),
             ("País en que se realizó:", self.country_var, "entry"),
             ("Fechas del estudio:", self.study_dates_var, "study_date"),
@@ -2939,10 +2989,19 @@ class MainApplication:
         container = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
         container.pack(fill=tk.BOTH, expand=True)
 
-        canvas = tk.Canvas(container, highlightthickness=0, bg=self.colors["bg"])
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Scrollbar visible para compatibilidad con todas las PCs
+        scrollbar = ctk.CTkScrollbar(
+            container,
+            orientation="vertical",
+            button_color=self.colors["border"],
+            button_hover_color=self.colors["primary"],
+        )
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        canvas.configure(yscrollcommand=None)
+        canvas = tk.Canvas(container, highlightthickness=0, bg=self.colors["bg"],
+                           yscrollcommand=scrollbar.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.configure(command=canvas.yview)
 
         inner_frame = ctk.CTkFrame(canvas, fg_color="transparent", corner_radius=0)
         window_id = canvas.create_window((0, 0), window=inner_frame, anchor="nw")
@@ -2955,7 +3014,11 @@ class MainApplication:
 
         inner_frame.bind("<Configure>", _update_scroll_region)
         canvas.bind("<Configure>", _resize_inner)
+
+        # Activar scroll cuando el mouse entra al canvas O al inner_frame
         self._bind_mousewheel(canvas)
+        inner_frame.bind("<Enter>", lambda _e: setattr(self, "_active_mousewheel_canvas", canvas), add="+")
+        inner_frame.bind("<Leave>", lambda _e: self._deactivate_canvas_if_match(canvas), add="+")
 
         self.results_canvas = canvas
         self.results_section_container = inner_frame
@@ -2980,6 +3043,11 @@ class MainApplication:
 
         return content_frame
 
+    def _deactivate_canvas_if_match(self, canvas: tk.Canvas):
+        """Desactiva el canvas activo solo si es el canvas indicado."""
+        if self._active_mousewheel_canvas is canvas:
+            self._active_mousewheel_canvas = None
+
     def _bind_mousewheel(self, canvas: tk.Canvas):
         """Activa el desplazamiento con la rueda del ratón dentro del canvas."""
 
@@ -2992,6 +3060,25 @@ class MainApplication:
 
         canvas.bind("<Enter>", _activate, add="+")
         canvas.bind("<Leave>", _deactivate, add="+")
+
+    def _bind_widget_to_results_canvas(self, widget):
+        """Propaga el scroll del canvas de resultados a un widget hijo.
+        Útil para que el mousewheel funcione aunque el cursor esté sobre
+        un botón o entry dentro del área de resultados.
+        """
+        canvas = self.results_canvas
+        if canvas is None:
+            return
+
+        widget.bind("<Enter>", lambda _e: setattr(self, "_active_mousewheel_canvas", canvas), add="+")
+        widget.bind("<Leave>", lambda _e: self._deactivate_canvas_if_match(canvas), add="+")
+
+        # Propagar recursivamente a todos los hijos existentes
+        try:
+            for child in widget.winfo_children():
+                self._bind_widget_to_results_canvas(child)
+        except Exception:
+            pass
 
     def _bind_scrollable_frame_mousewheel(self, scrollable_frame: ctk.CTkScrollableFrame):
         """Enlaza la rueda del ratón a un CTkScrollableFrame."""
@@ -3072,6 +3159,9 @@ class MainApplication:
 
         for dataset_key in dataset_keys:
             self._create_result_block(self.results_section_container, dataset_key)
+
+        # Propagar el scroll del canvas a todos los widgets hijos ya creados
+        self._bind_widget_to_results_canvas(self.results_section_container)
 
     def _determine_result_dataset_keys(self):
         """Devuelve el listado de conjuntos a capturar basándose en la selección actual."""
@@ -4108,7 +4198,7 @@ class MainApplication:
         paragraphs = [
             (
                 f"La empresa {context['company']}, realizó las {context['evaluation_label']} durante {context['study_dates']}, "
-                f"a los colaboradores en la planta {context['plant']}, ubicada en {context['location']}."
+                f"a los colaboradores en el área {context['plant']}, ubicada en {context['location']}."
             ),
             (
                 f"Se aplicó la prueba de {context['evaluation_label']} {context['people_text']}, cada colaborador suministró "
@@ -4147,7 +4237,7 @@ class MainApplication:
             (
                 "La empresa Productos Toledano S.A., realizó la toma de las pruebas de espirometrías, "
                 "en el mes de febrero el día 21 del presente año, a los colaboradores que están expuestos a partículas, "
-                "en la Planta Incubadora Chorrerana S.A., en el área de La Chorrera."
+                "en el Área Incubadora Chorrerana S.A., en el área de La Chorrera."
             ),
             (
                 "Se aplicó la prueba de espirometrías laboral a un total de 45 colaboradores, cada uno de estos suministró "
@@ -4172,7 +4262,7 @@ class MainApplication:
         paragraphs = [
             (
                 f"La empresa {context['company']}, coordinó jornadas de audiometrías y espirometrías durante {context['study_dates']}, "
-                f"para los colaboradores en la planta {context['plant']}, ubicada en {context['location']}."
+                f"para los colaboradores en el área {context['plant']}, ubicada en {context['location']}."
             ),
             (
                 f"Se aplicaron ambas pruebas {context['people_text']}, recopilando de forma confidencial la historia clínica y laboral de cada participante. "

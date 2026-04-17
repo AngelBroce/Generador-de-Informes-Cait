@@ -623,7 +623,7 @@ class PDFGenerator:
         rows = [
             ("Nombre de la empresa:", report_data.get("company", "N/A")),
             (
-                "Planta evaluada:",
+                "Área evaluada:",
                 report_data.get("plant") or report_data.get("location", "N/A"),
             ),
             ("Actividad principal:", report_data.get("activity", "N/A")),
@@ -860,7 +860,7 @@ class PDFGenerator:
         pdf_canvas.drawCentredString(
             self.page_width / 2,
             y,
-            f"PLANTA: {plant_label.upper() if plant_label else 'N/D'}",
+            f"ÁREA: {plant_label.upper() if plant_label else 'N/D'}",
         )
 
         y -= 0.2 * inch
