@@ -58,6 +58,24 @@ class CounterpartRepository:
         self.save_all(entries)
         return entry
 
+    def update_counterpart(self, counterpart_id: str, updates: Dict) -> Optional[Dict]:
+        if not counterpart_id:
+            return None
+
+        entries = self.load_all()
+        updated_entry = None
+        for idx, entry in enumerate(entries):
+            if entry.get("id") == counterpart_id:
+                merged = dict(entry)
+                merged.update({key: value for key, value in updates.items() if value is not None})
+                entries[idx] = merged
+                updated_entry = merged
+                break
+
+        if updated_entry:
+            self.save_all(entries)
+        return updated_entry
+
     def remove_counterpart(self, counterpart_id: str) -> bool:
         if not counterpart_id:
             return False

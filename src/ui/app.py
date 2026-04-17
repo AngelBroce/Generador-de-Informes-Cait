@@ -855,6 +855,36 @@ class MainApplication:
             corner_radius=8,
         )
         help_button.pack(side=tk.RIGHT)
+        
+        counterparts_btn = ctk.CTkButton(
+            header_content,
+            text="👔 Contrapartes",
+            fg_color="transparent",
+            hover_color="#1F8543",
+            text_color=surface,
+            border_width=1,
+            border_color="#2B8B4F",
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+            height=32,
+            corner_radius=8,
+            command=self._open_counterparts_management_window
+        )
+        counterparts_btn.pack(side=tk.RIGHT, padx=(0, 10))
+
+        evaluators_btn = ctk.CTkButton(
+            header_content,
+            text="👨‍⚕️ Evaluadores",
+            fg_color="transparent",
+            hover_color="#1F8543",
+            text_color=surface,
+            border_width=1,
+            border_color="#2B8B4F",
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+            height=32,
+            corner_radius=8,
+            command=self._open_evaluators_management_window
+        )
+        evaluators_btn.pack(side=tk.RIGHT, padx=(0, 10))
         self._attach_tooltip(
             help_button,
             "Crear informe genera solo el PDF. Exportar ZIP guarda el PDF y todos los adjuntos, "
@@ -1171,26 +1201,26 @@ class MainApplication:
             evaluator_actions.grid(row=evaluator_actions_row, column=2, sticky=tk.W, padx=6, pady=8)
         ctk.CTkButton(
             evaluator_actions,
-            text="Agregar",
+            text="➕ Agregar",
             fg_color=self.colors["primary_muted"],
             text_color=self.colors["primary"],
             hover_color="#D4EDDA",
-            font=ctk.CTkFont("Segoe UI", 10, "bold"),
-            corner_radius=10,
-            height=34,
-            command=self._open_add_evaluator_dialog,
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            corner_radius=12,
+            height=40,
+            command=self._open_evaluator_dialog,
         ).pack(side=tk.LEFT, padx=(0, 6))
         ctk.CTkButton(
             evaluator_actions,
-            text="Eliminar",
+            text="🗑️ Eliminar",
             fg_color="transparent",
             text_color=self.colors["primary"],
             border_width=1,
             border_color=self.colors["primary"],
             hover_color=self.colors["primary_muted"],
-            font=ctk.CTkFont("Segoe UI", 10, "bold"),
-            corner_radius=10,
-            height=34,
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            corner_radius=12,
+            height=40,
             command=self._remove_selected_evaluator,
         ).pack(side=tk.LEFT)
 
@@ -1273,26 +1303,26 @@ class MainApplication:
             counterpart_actions.grid(row=counterpart_actions_row, column=2, sticky=tk.W, padx=6, pady=8)
         ctk.CTkButton(
             counterpart_actions,
-            text="Agregar",
+            text="➕ Agregar",
             fg_color=self.colors["primary_muted"],
             text_color=self.colors["primary"],
             hover_color="#D4EDDA",
-            font=ctk.CTkFont("Segoe UI", 10, "bold"),
-            corner_radius=10,
-            height=34,
-            command=self._open_add_counterpart_dialog,
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            corner_radius=12,
+            height=40,
+            command=self._open_counterpart_dialog,
         ).pack(side=tk.LEFT, padx=(0, 6))
         ctk.CTkButton(
             counterpart_actions,
-            text="Eliminar",
+            text="🗑️ Eliminar",
             fg_color="transparent",
             text_color=self.colors["primary"],
             border_width=1,
             border_color=self.colors["primary"],
             hover_color=self.colors["primary_muted"],
-            font=ctk.CTkFont("Segoe UI", 10, "bold"),
-            corner_radius=10,
-            height=34,
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            corner_radius=12,
+            height=40,
             command=self._remove_selected_counterpart,
         ).pack(side=tk.LEFT)
 
@@ -1409,6 +1439,9 @@ class MainApplication:
     def _reload_evaluators(self, prefer_id=None) -> None:
         """Carga o actualiza el listado de evaluadores desde el repositorio."""
 
+        if hasattr(self, "_refresh_evaluators_tree"):
+            self._refresh_evaluators_tree()
+
         profiles = self.evaluators_repo.list_all()
         self.evaluator_profiles = {profile.get("id"): profile for profile in profiles if profile.get("id")}
         names = [profile.get("name", "") for profile in profiles]
@@ -1504,6 +1537,9 @@ class MainApplication:
     def _reload_counterparts(self, prefer_id: str | None = None) -> None:
         """Carga o actualiza el listado de contrapartes desde el repositorio."""
 
+        if hasattr(self, "_refresh_counterparts_tree"):
+            self._refresh_counterparts_tree()
+
         profiles = self.counterparts_repo.list_all()
         self.counterpart_profiles = {
             profile.get("id"): profile
@@ -1576,34 +1612,49 @@ class MainApplication:
         state = "normal" if enabled else "disabled"
         self.counterpart_role_entry.configure(state=state)
 
-    def _open_add_counterpart_dialog(self) -> None:
-        """Muestra el cuadro para agregar una nueva contraparte tecnica."""
+    def _open_counterpart_dialog(self, counterpart_id: str | None = None) -> None:
+        """Muestra el cuadro para agregar o editar una contraparte tecnica."""
 
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Nueva contraparte tecnica")
+        dialog = ctk.CTkToplevel(self.root)
+        is_edit = bool(counterpart_id)
+        dialog.title("Editar contraparte tecnica" if is_edit else "Nueva contraparte tecnica")
+        dialog.geometry("450x200")
         dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
 
-        name_var = tk.StringVar()
-        role_var = tk.StringVar()
+        profile = {}
+        if is_edit:
+            profile = self.counterpart_profiles.get(counterpart_id, {})
 
-        container = ttk.Frame(dialog, padding=15)
-        container.pack(fill=tk.BOTH, expand=True)
+        name_var = tk.StringVar(value=profile.get("name", ""))
+        role_var = tk.StringVar(value=profile.get("role", ""))
 
-        ttk.Label(container, text="Nombre completo:", style="Subtitle.TLabel").grid(
-            row=0, column=0, sticky=tk.W, pady=4
+        container = ctk.CTkFrame(dialog, fg_color="transparent")
+        container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        ctk.CTkLabel(container, text="Nombre completo:", font=ctk.CTkFont("Segoe UI", 12, "bold")).grid(
+            row=0, column=0, sticky=tk.W, pady=8, padx=(0, 10)
         )
-        ttk.Entry(container, textvariable=name_var, width=40).grid(row=0, column=1, sticky=tk.EW, pady=4)
-
-        ttk.Label(container, text="Cargo / rol:", style="Subtitle.TLabel").grid(
-            row=1, column=0, sticky=tk.W, pady=4
+        ctk.CTkEntry(container, textvariable=name_var, width=250, border_width=1).grid(
+            row=0, column=1, sticky=tk.EW, pady=8
         )
-        ttk.Entry(container, textvariable=role_var, width=40).grid(row=1, column=1, sticky=tk.EW, pady=4)
 
-        buttons = ttk.Frame(container)
-        buttons.grid(row=2, column=0, columnspan=2, sticky=tk.E, pady=(12, 0))
-        ttk.Button(buttons, text="Cancelar", command=dialog.destroy).pack(side=tk.RIGHT, padx=5)
+        ctk.CTkLabel(container, text="Cargo / rol:", font=ctk.CTkFont("Segoe UI", 12, "bold")).grid(
+            row=1, column=0, sticky=tk.W, pady=8, padx=(0, 10)
+        )
+        ctk.CTkEntry(container, textvariable=role_var, width=250, border_width=1).grid(
+            row=1, column=1, sticky=tk.EW, pady=8
+        )
+
+        buttons = ctk.CTkFrame(container, fg_color="transparent")
+        buttons.grid(row=2, column=0, columnspan=2, sticky=tk.E, pady=(20, 0))
+        
+        ctk.CTkButton(
+            buttons, text="Cancelar", fg_color="transparent", text_color=self.colors["text"],
+            hover_color=self.colors["border"], border_width=1, border_color=self.colors["border"],
+            command=dialog.destroy, width=100
+        ).pack(side=tk.RIGHT, padx=(10, 0))
 
         def _save_counterpart():
             name = name_var.get().strip()
@@ -1611,23 +1662,32 @@ class MainApplication:
                 messagebox.showwarning("Datos incompletos", "El nombre de la contraparte es obligatorio.")
                 return
 
+            payload = {
+                "name": name,
+                "role": role_var.get().strip(),
+            }
+
             try:
-                new_entry = self.counterparts_repo.add_counterpart(
-                    {
-                        "name": name,
-                        "role": role_var.get().strip(),
-                    }
-                )
+                if is_edit:
+                    result_entry = self.counterparts_repo.update_counterpart(counterpart_id, payload)
+                    if not result_entry:
+                        raise ValueError("No se pudo actualizar el registro de la contraparte.")
+                else:
+                    result_entry = self.counterparts_repo.add_counterpart(payload)
             except ValueError as exc:
                 messagebox.showerror("No se pudo guardar", str(exc))
                 return
 
             dialog.destroy()
-            self._reload_counterparts(prefer_id=new_entry.get("id"))
+            self._reload_counterparts(prefer_id=result_entry.get("id"))
+            
+            if hasattr(self, "_refresh_counterparts_tree"):
+                self._refresh_counterparts_tree()
 
-        ttk.Button(buttons, text="Guardar", style="Primary.TButton", command=_save_counterpart).pack(
-            side=tk.RIGHT
-        )
+        ctk.CTkButton(
+            buttons, text="Guardar", fg_color=self.colors["primary"], hover_color="#1F8543", text_color="white",
+            command=_save_counterpart, width=100
+        ).pack(side=tk.RIGHT)
         container.columnconfigure(1, weight=1)
         self._center_window(dialog)
 
@@ -1782,65 +1842,92 @@ class MainApplication:
         except ValueError:
             return str(destination)
 
-    def _open_add_evaluator_dialog(self) -> None:
-        """Muestra un cuadro de diálogo para registrar nuevos evaluadores."""
+    def _open_evaluator_dialog(self, evaluator_id: str | None = None) -> None:
+        """Muestra un form para registrar o editar un evaluador. Si evaluator_id se provee, edita."""
 
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Nuevo evaluador")
+        dialog = ctk.CTkToplevel(self.root)
+        is_edit = bool(evaluator_id)
+        dialog.title("Editar evaluador" if is_edit else "Nuevo evaluador")
+        dialog.geometry("500x380")
         dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
 
-        name_var = tk.StringVar()
-        profession_var = tk.StringVar()
-        registry_var = tk.StringVar()
-        audio_var = tk.BooleanVar(value=True)
-        espiro_var = tk.BooleanVar(value="espirom" in (self.report_type_var.get() or "").lower())
-        credential_var = tk.StringVar()
+        profile = {}
+        if is_edit:
+            profile = self.evaluator_profiles.get(evaluator_id, {})
 
-        container = ttk.Frame(dialog, padding=15)
-        container.pack(fill=tk.BOTH, expand=True)
+        name_var = tk.StringVar(value=profile.get("name", ""))
+        profession_var = tk.StringVar(value=profile.get("profession", ""))
+        registry_var = tk.StringVar(value=profile.get("registry", ""))
+        
+        applicable = profile.get("applicable_reports", [])
+        if is_edit:
+            audio_var = tk.BooleanVar(value="audiometria" in applicable)
+            espiro_var = tk.BooleanVar(value="espirometria" in applicable)
+        else:
+            audio_var = tk.BooleanVar(value=True)
+            espiro_var = tk.BooleanVar(value="espirom" in (self.report_type_var.get() or "").lower())
+            
+        credential_var = tk.StringVar(value=profile.get("credential_file", ""))
 
-        ttk.Label(container, text="Nombre completo:", style='Subtitle.TLabel').grid(row=0, column=0, sticky=tk.W, pady=4)
-        ttk.Entry(container, textvariable=name_var, width=40).grid(row=0, column=1, sticky=tk.EW, pady=4)
+        container = ctk.CTkFrame(dialog, fg_color="transparent")
+        container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
-        ttk.Label(container, text="Profesión o título:", style='Subtitle.TLabel').grid(row=1, column=0, sticky=tk.W, pady=4)
-        ttk.Entry(container, textvariable=profession_var, width=40).grid(row=1, column=1, sticky=tk.EW, pady=4)
+        ctk.CTkLabel(container, text="Nombre completo:", font=ctk.CTkFont("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky=tk.W, pady=8, padx=(0, 10))
+        ctk.CTkEntry(container, textvariable=name_var, width=300).grid(row=0, column=1, sticky=tk.EW, pady=8)
 
-        ttk.Label(container, text="Registro/licencia:", style='Subtitle.TLabel').grid(row=2, column=0, sticky=tk.W, pady=4)
-        ttk.Entry(container, textvariable=registry_var, width=40).grid(row=2, column=1, sticky=tk.EW, pady=4)
+        ctk.CTkLabel(container, text="Profesión o título:", font=ctk.CTkFont("Segoe UI", 12, "bold")).grid(row=1, column=0, sticky=tk.W, pady=8, padx=(0, 10))
+        ctk.CTkEntry(container, textvariable=profession_var, width=300).grid(row=1, column=1, sticky=tk.EW, pady=8)
 
-        ttk.Label(container, text="Idoneidad (PDF):", style='Subtitle.TLabel').grid(row=3, column=0, sticky=tk.W, pady=4)
-        credential_entry = ttk.Entry(container, textvariable=credential_var, width=34, state="readonly")
-        credential_entry.grid(row=3, column=1, sticky=tk.W, pady=4)
-        ttk.Button(
-            container,
+        ctk.CTkLabel(container, text="Registro/licencia:", font=ctk.CTkFont("Segoe UI", 12, "bold")).grid(row=2, column=0, sticky=tk.W, pady=8, padx=(0, 10))
+        ctk.CTkEntry(container, textvariable=registry_var, width=300).grid(row=2, column=1, sticky=tk.EW, pady=8)
+
+        ctk.CTkLabel(container, text="Idoneidad:", font=ctk.CTkFont("Segoe UI", 12, "bold")).grid(row=3, column=0, sticky=tk.W, pady=8, padx=(0, 10))
+        
+        cred_frame = ctk.CTkFrame(container, fg_color="transparent")
+        cred_frame.grid(row=3, column=1, sticky=tk.EW, pady=8)
+        
+        credential_entry = ctk.CTkEntry(cred_frame, textvariable=credential_var, width=190, state="normal")
+        credential_entry.configure(state="readonly")
+        credential_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
+        
+        ctk.CTkButton(
+            cred_frame,
             text="Seleccionar",
-            style='Action.TButton',
+            fg_color=self.colors["primary_muted"],
+            text_color=self.colors["primary"],
+            hover_color="#D4EDDA",
+            width=100,
             command=lambda: self._select_evaluator_credential(credential_var),
-        ).grid(row=3, column=1, sticky=tk.E, pady=4)
+        ).pack(side=tk.RIGHT)
 
-        checks_frame = ttk.Frame(container)
-        checks_frame.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=(8, 4))
-        ttk.Checkbutton(checks_frame, text="Disponible en audiometría", variable=audio_var).pack(anchor=tk.W)
-        ttk.Checkbutton(checks_frame, text="Disponible en espirometría", variable=espiro_var).pack(anchor=tk.W)
+        checks_frame = ctk.CTkFrame(container, fg_color="transparent")
+        checks_frame.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=(16, 4))
+        ctk.CTkCheckBox(checks_frame, text="Disponible en audiometría", variable=audio_var, font=ctk.CTkFont("Segoe UI", 12)).pack(anchor=tk.W, pady=4)
+        ctk.CTkCheckBox(checks_frame, text="Disponible en espirometría", variable=espiro_var, font=ctk.CTkFont("Segoe UI", 12)).pack(anchor=tk.W, pady=4)
 
-        buttons = ttk.Frame(container)
-        buttons.grid(row=5, column=0, columnspan=2, sticky=tk.E, pady=(12, 0))
-        ttk.Button(buttons, text="Cancelar", command=dialog.destroy).pack(side=tk.RIGHT, padx=5)
+        buttons = ctk.CTkFrame(container, fg_color="transparent")
+        buttons.grid(row=5, column=0, columnspan=2, sticky=tk.E, pady=(20, 0))
+        
+        ctk.CTkButton(
+            buttons, text="Cancelar", fg_color="transparent", text_color=self.colors["text"],
+            hover_color=self.colors["border"], border_width=1, border_color=self.colors["border"],
+            command=dialog.destroy, width=100
+        ).pack(side=tk.RIGHT, padx=(10, 0))
 
-        def _save_new_evaluator():
+        def _save_evaluator():
             name = name_var.get().strip()
             if not name:
                 messagebox.showwarning("Datos incompletos", "El nombre del evaluador es obligatorio.")
                 return
 
-            applicable = []
+            new_applicable = []
             if audio_var.get():
-                applicable.append("audiometria")
+                new_applicable.append("audiometria")
             if espiro_var.get():
-                applicable.append("espirometria")
-            if not applicable:
+                new_applicable.append("espirometria")
+            if not new_applicable:
                 messagebox.showwarning(
                     "Selecciona al menos un tipo",
                     "Debes indicar en qué tipo de informe participará el evaluador.",
@@ -1850,39 +1937,55 @@ class MainApplication:
             if not credential_var.get().strip():
                 messagebox.showwarning(
                     "Idoneidad requerida",
-                    "Debes adjuntar el archivo de idoneidad en PDF.",
+                    "Debes adjuntar el archivo de idoneidad (puede ser PDF o imagen).",
                 )
                 return
 
-            credential_path = self._store_evaluator_credential(
-                credential_var.get().strip(),
-                name,
-            )
-            if not credential_path:
-                messagebox.showerror(
-                    "No se pudo guardar",
-                    "No fue posible copiar la idoneidad al directorio interno.",
-                )
-                return
+            original_credential = profile.get("credential_file", "")
+            current_credential = credential_var.get().strip()
+            
+            # If the user selected a new file path entirely
+            if current_credential != original_credential:
+                credential_path = self._store_evaluator_credential(current_credential, name)
+                if not credential_path:
+                    messagebox.showerror(
+                        "No se pudo guardar",
+                        "No fue posible copiar la idoneidad al directorio interno.",
+                    )
+                    return
+            else:
+                credential_path = current_credential
+
+            payload = {
+                "name": name,
+                "profession": profession_var.get().strip(),
+                "registry": registry_var.get().strip(),
+                "credential_file": credential_path,
+                "applicable_reports": new_applicable,
+            }
 
             try:
-                new_entry = self.evaluators_repo.add_evaluator(
-                    {
-                        "name": name,
-                        "profession": profession_var.get().strip(),
-                        "registry": registry_var.get().strip(),
-                        "credential_file": credential_path,
-                        "applicable_reports": applicable,
-                    }
-                )
+                if is_edit:
+                    result_entry = self.evaluators_repo.update_evaluator(evaluator_id, payload)
+                    if not result_entry:
+                        raise ValueError("No se pudo localizar el registro para actualizar.")
+                else:
+                    result_entry = self.evaluators_repo.add_evaluator(payload)
             except ValueError as exc:
                 messagebox.showerror("No se pudo guardar", str(exc))
                 return
 
             dialog.destroy()
-            self._reload_evaluators(prefer_id=new_entry.get("id"))
+            self._reload_evaluators(prefer_id=result_entry.get("id"))
+            
+            # Update currently visible UI if an edit happened
+            if hasattr(self, "_refresh_evaluators_tree"):
+                self._refresh_evaluators_tree()
 
-        ttk.Button(buttons, text="Guardar", style='Primary.TButton', command=_save_new_evaluator).pack(side=tk.RIGHT)
+        ctk.CTkButton(
+            buttons, text="Guardar", fg_color=self.colors["primary"], hover_color="#1F8543", text_color="white",
+            command=_save_evaluator, width=100
+        ).pack(side=tk.RIGHT)
         container.columnconfigure(1, weight=1)
         self._center_window(dialog)
 
@@ -2349,6 +2452,259 @@ class MainApplication:
                 style='Subtitle.TLabel'
             ).pack(anchor=tk.W)
 
+    def _open_evaluators_management_window(self):
+        """Muestra la ventana de administración de evaluadores."""
+
+        window = ctk.CTkToplevel(self.root)
+        window.title("Gestión de Evaluadores")
+        window.geometry("750x450")
+        window.transient(self.root)
+        window.grab_set()
+
+        main_bg = ctk.CTkFrame(window, fg_color=self.colors["bg"])
+        main_bg.pack(fill=tk.BOTH, expand=True)
+
+        header = self._create_section_header(
+            main_bg,
+            "Gestión de Evaluadores",
+            "Administra el catálogo de evaluadores disponibles para los informes clínicos.",
+        )
+        header.pack(anchor=tk.W, pady=(16, 16), padx=16, fill=tk.X)
+
+        card, card_body = self._create_card(main_bg)
+        card.pack(fill=tk.BOTH, expand=True, pady=4)
+
+        actions_frame = ctk.CTkFrame(card_body, fg_color="transparent")
+        actions_frame.pack(fill=tk.X, pady=(0, 12))
+
+        ctk.CTkButton(
+            actions_frame,
+            text="➕ Nuevo Evaluador",
+            fg_color=self.colors["primary_muted"],
+            text_color=self.colors["primary"],
+            hover_color="#D4EDDA",
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            corner_radius=12,
+            height=40,
+            command=lambda: self._open_evaluator_dialog()
+        ).pack(side=tk.LEFT, padx=(0, 8))
+
+        ctk.CTkButton(
+            actions_frame,
+            text="✏️ Editar",
+            fg_color="transparent",
+            text_color=self.colors["primary"],
+            border_width=1,
+            border_color=self.colors["primary"],
+            hover_color=self.colors["primary_muted"],
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            corner_radius=12,
+            height=40,
+            command=self._edit_selected_evaluator_from_tree
+        ).pack(side=tk.LEFT, padx=(0, 8))
+        
+        ctk.CTkButton(
+            actions_frame,
+            text="🗑️ Eliminar",
+            fg_color="transparent",
+            text_color=self.colors["error"],
+            border_width=1,
+            border_color=self.colors["error"],
+            hover_color="#ffebee",
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            corner_radius=12,
+            height=40,
+            command=self._remove_selected_evaluator_from_tree
+        ).pack(side=tk.LEFT)
+
+        columns = ("name", "profession", "registry", "reports")
+        tree = ttk.Treeview(card_body, columns=columns, show="headings", height=12)
+        tree.heading("name", text="Nombre")
+        tree.heading("profession", text="Profesión")
+        tree.heading("registry", text="Registro")
+        tree.heading("reports", text="Reportes aplicables")
+
+        tree.column("name", width=200, anchor=tk.W)
+        tree.column("profession", width=150, anchor=tk.W)
+        tree.column("registry", width=100, anchor=tk.W)
+        tree.column("reports", width=150, anchor=tk.W)
+
+        tree.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+
+        y_scroll = ttk.Scrollbar(card_body, orient=tk.VERTICAL, command=tree.yview)
+        y_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        tree.configure(yscrollcommand=y_scroll.set)
+
+        self.evaluators_tree = tree
+        self._refresh_evaluators_tree()
+        
+    def _open_counterparts_management_window(self):
+        """Muestra la ventana de administración de contrapartes técnicas."""
+
+        window = ctk.CTkToplevel(self.root)
+        window.title("Gestión de Contrapartes")
+        window.geometry("700x400")
+        window.transient(self.root)
+        window.grab_set()
+
+        main_bg = ctk.CTkFrame(window, fg_color=self.colors["bg"])
+        main_bg.pack(fill=tk.BOTH, expand=True)
+
+        header = self._create_section_header(
+            main_bg,
+            "Gestión de Contrapartes",
+            "Administra el catálogo de contrapartes técnicas o contactos de la empresa.",
+        )
+        header.pack(anchor=tk.W, pady=(16, 16), padx=16, fill=tk.X)
+
+        card, card_body = self._create_card(main_bg)
+        card.pack(fill=tk.BOTH, expand=True, pady=4)
+
+        actions_frame = ctk.CTkFrame(card_body, fg_color="transparent")
+        actions_frame.pack(fill=tk.X, pady=(0, 12))
+
+        ctk.CTkButton(
+            actions_frame,
+            text="➕ Nueva Contraparte",
+            fg_color=self.colors["primary_muted"],
+            text_color=self.colors["primary"],
+            hover_color="#D4EDDA",
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            corner_radius=12,
+            height=40,
+            command=lambda: self._open_counterpart_dialog()
+        ).pack(side=tk.LEFT, padx=(0, 8))
+
+        ctk.CTkButton(
+            actions_frame,
+            text="✏️ Editar",
+            fg_color="transparent",
+            text_color=self.colors["primary"],
+            border_width=1,
+            border_color=self.colors["primary"],
+            hover_color=self.colors["primary_muted"],
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            corner_radius=12,
+            height=40,
+            command=self._edit_selected_counterpart_from_tree
+        ).pack(side=tk.LEFT, padx=(0, 8))
+        
+        ctk.CTkButton(
+            actions_frame,
+            text="🗑️ Eliminar",
+            fg_color="transparent",
+            text_color=self.colors["error"],
+            border_width=1,
+            border_color=self.colors["error"],
+            hover_color="#ffebee",
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            corner_radius=12,
+            height=40,
+            command=self._remove_selected_counterpart_from_tree
+        ).pack(side=tk.LEFT)
+
+        columns = ("name", "role")
+        tree = ttk.Treeview(card_body, columns=columns, show="headings", height=12)
+        tree.heading("name", text="Nombre")
+        tree.heading("role", text="Cargo / Rol")
+
+        tree.column("name", width=300, anchor=tk.W)
+        tree.column("role", width=250, anchor=tk.W)
+
+        tree.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+
+        y_scroll = ttk.Scrollbar(card_body, orient=tk.VERTICAL, command=tree.yview)
+        y_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        tree.configure(yscrollcommand=y_scroll.set)
+
+        self.counterparts_tree = tree
+        self._refresh_counterparts_tree()
+
+    def _refresh_counterparts_tree(self):
+        if getattr(self, "counterparts_tree", None) is None:
+            return
+        
+        tree = self.counterparts_tree
+        for row in tree.get_children():
+            tree.delete(row)
+
+        for eval_id, profile in self.counterpart_profiles.items():
+            name = profile.get("name", "")
+            role = profile.get("role", "")
+            tree.insert("", tk.END, iid=eval_id, values=(name, role))
+
+    def _edit_selected_counterpart_from_tree(self):
+        selected = self.counterparts_tree.selection()
+        if not selected:
+            messagebox.showinfo("Sin selección", "Selecciona una contraparte para editarla.")
+            return
+        eval_id = selected[0]
+        self._open_counterpart_dialog(counterpart_id=eval_id)
+
+    def _remove_selected_counterpart_from_tree(self):
+        selected = self.counterparts_tree.selection()
+        if not selected:
+            messagebox.showinfo("Sin selección", "Selecciona una contraparte para eliminarla.")
+            return
+        c_id = selected[0]
+
+        profile = self.counterpart_profiles.get(c_id, {})
+        name = profile.get("name", "contraparte")
+        confirm = messagebox.askyesno(
+            "Confirmar eliminación",
+            f"Se eliminará la contraparte '{name}'. ¿Deseas continuar?",
+        )
+        if not confirm:
+            return
+
+        if self.counterparts_repo.remove_counterpart(c_id):
+            self._reload_counterparts()
+            messagebox.showinfo("Eliminado", f"La contraparte '{name}' ha sido eliminada.")
+
+    def _refresh_evaluators_tree(self):
+        if getattr(self, "evaluators_tree", None) is None:
+            return
+        
+        tree = self.evaluators_tree
+        for row in tree.get_children():
+            tree.delete(row)
+
+        for eval_id, profile in self.evaluator_profiles.items():
+            name = profile.get("name", "")
+            profession = profile.get("profession", "")
+            registry = profile.get("registry", "")
+            reports = ", ".join(profile.get("applicable_reports", []))
+            tree.insert("", tk.END, iid=eval_id, values=(name, profession, registry, reports))
+
+    def _edit_selected_evaluator_from_tree(self):
+        selected = self.evaluators_tree.selection()
+        if not selected:
+            messagebox.showinfo("Sin selección", "Selecciona un evaluador para editarlo.")
+            return
+        eval_id = selected[0]
+        self._open_evaluator_dialog(evaluator_id=eval_id)
+
+    def _remove_selected_evaluator_from_tree(self):
+        selected = self.evaluators_tree.selection()
+        if not selected:
+            messagebox.showinfo("Sin selección", "Selecciona un evaluador para eliminarlo.")
+            return
+        evaluator_id = selected[0]
+
+        profile = self.evaluator_profiles.get(evaluator_id, {})
+        name = profile.get("name", "evaluador")
+        confirm = messagebox.askyesno(
+            "Confirmar eliminación",
+            f"Se eliminará el evaluador '{name}'. ¿Deseas continuar?",
+        )
+        if not confirm:
+            return
+
+        if self.evaluators_repo.remove_evaluator(evaluator_id):
+            self._reload_evaluators()
+            messagebox.showinfo("Eliminado", f"El evaluador '{name}' ha sido eliminado.")
+
+
     def _build_company_data_section(self, frame: ttk.Frame):
         """Sección Parte 3 con los campos adicionales para datos de la empresa."""
         for child in frame.winfo_children():
@@ -2584,41 +2940,24 @@ class MainApplication:
         self.results_section_container = inner_frame
 
     def _create_scrollable_section(self, parent: ctk.CTkFrame) -> ctk.CTkFrame:
-        """Crea un contenedor desplazable para una sección."""
+        """Crea un contenedor desplazable para una sección usando CTkScrollableFrame interno."""
 
-        container = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
-        container.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
-
-        canvas = tk.Canvas(container, highlightthickness=0, bg=self.colors["surface"])
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        scrollbar = ctk.CTkScrollbar(
-            container,
-            orientation="vertical",
-            command=canvas.yview,
-            width=12,
-            corner_radius=999,
-            fg_color=self.colors["border"],
-            button_color=self.colors["primary"],
-            button_hover_color=self.colors["primary_dark"],
+        scrollable_frame = ctk.CTkScrollableFrame(
+            parent,
+            fg_color="transparent",
+            corner_radius=0,
+            scrollbar_button_color=self.colors["border"],
+            scrollbar_button_hover_color=self.colors["primary"],
         )
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(6, 0))
-        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollable_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
-        inner_frame = ctk.CTkFrame(canvas, fg_color="transparent", corner_radius=0)
-        window_id = canvas.create_window((0, 0), window=inner_frame, anchor="nw")
+        self._bind_scrollable_frame_mousewheel(scrollable_frame)
 
-        def _update_scroll_region(_event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
+        # Contenedor seguro para no corromper CTkScrollableFrame al limpiar con winfo_children()
+        content_frame = ctk.CTkFrame(scrollable_frame, fg_color="transparent", corner_radius=0)
+        content_frame.pack(fill=tk.BOTH, expand=True)
 
-        def _resize_inner(event):
-            canvas.itemconfig(window_id, width=event.width)
-
-        inner_frame.bind("<Configure>", _update_scroll_region)
-        canvas.bind("<Configure>", _resize_inner)
-        self._bind_mousewheel(canvas)
-
-        return inner_frame
+        return content_frame
 
     def _bind_mousewheel(self, canvas: tk.Canvas):
         """Activa el desplazamiento con la rueda del ratón dentro del canvas."""
@@ -4652,24 +4991,29 @@ class MainApplication:
     def save_report_draft(self) -> None:
         """Guarda un borrador en JSON para reabrirlo luego."""
 
+        dialog_name = ctk.CTkInputDialog(text="Introduce un nombre para el borrador (opcional):", title="Guardar borrador")
+        user_input = dialog_name.get_input()
+
+        if user_input is None:
+            return  # Cancelled
+
+        name = user_input.strip()
+        if not name:
+            name = f"borrador_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        if not name.endswith(".json"):
+            name += ".json"
+
         drafts_dir = self.data_root / "reports"
         drafts_dir.mkdir(parents=True, exist_ok=True)
-        default_name = f"borrador_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        target = filedialog.asksaveasfilename(
-            title="Guardar borrador",
-            defaultextension=".json",
-            initialdir=str(drafts_dir),
-            initialfile=default_name,
-            filetypes=(("JSON", "*.json"), ("Todos los archivos", "*.*")),
-        )
-        if not target:
-            return
+        target = drafts_dir / name
 
         state = self._collect_report_state()
         try:
             with open(target, "w", encoding="utf-8") as handler:
                 json.dump(state, handler, ensure_ascii=False, indent=2)
             self.status_label.configure(text=f"Borrador guardado: {Path(target).name}")
+            messagebox.showinfo("Guardado", f"El borrador '{name}' se ha guardado exitosamente.")
         except OSError as exc:
             messagebox.showerror("Error", f"No se pudo guardar el borrador: {exc}")
 
@@ -4812,6 +5156,13 @@ class MainApplication:
             return
 
         self._load_report_draft_from_path(str(draft_path))
+
+        if self.drafts_window is not None:
+            self.drafts_window.destroy()
+            self.drafts_window = None
+            self.drafts_tree = None
+
+        messagebox.showinfo("Carga Exitosa", f"Borrador cargado correctamente:\n{draft_path.name}")
 
     def _delete_selected_draft(self) -> None:
         """Elimina el borrador seleccionado en la tabla."""
