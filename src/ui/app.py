@@ -570,6 +570,31 @@ class MainApplication:
         error_label.pack(anchor=tk.W, pady=(2, 0))
         return container, combo, error_label
 
+    def _create_native_combo(self, parent, text_var: tk.StringVar, values: list[str], command=None, width: int = 260):
+        """Combo nativo para permitir scroll con la rueda del ratón."""
+        width_chars = int(self._responsive_field_width(width) / 10)
+        combo = ttk.Combobox(
+            parent,
+            textvariable=text_var,
+            values=values,
+            state="readonly",
+            width=width_chars,
+            font=("Segoe UI", 12)
+        )
+        if command:
+            combo.bind("<<ComboboxSelected>>", lambda e: command(combo.get()))
+        return combo
+
+    def _create_validated_native_combo(self, parent, text_var: tk.StringVar, values: list[str], command=None, width: int = 260):
+        container = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
+        combo = self._create_native_combo(container, text_var, values, command=command, width=width)
+        combo.pack(fill=tk.X, ipady=4)
+        error_label = ctk.CTkLabel(
+            container, text="", font=ctk.CTkFont("Segoe UI", 11), text_color=self.colors["error"], anchor="w"
+        )
+        error_label.pack(anchor=tk.W, pady=(2, 0))
+        return container, combo, error_label
+
     def _set_field_error(self, widget, error_label: ctk.CTkLabel, message: str | None) -> None:
         """Marca un campo con error y muestra el mensaje."""
 
@@ -1173,13 +1198,14 @@ class MainApplication:
         form.grid_columnconfigure(1, weight=1)
         compact_layout = self._responsive_mode == "compact"
 
-        evaluator_actions_row = 4 if compact_layout else 3
-        evaluator_detail_row = 5 if compact_layout else 4
-        combined_evaluator_row = 6 if compact_layout else 5
-        counterpart_row = 7 if compact_layout else 6
-        counterpart_actions_row = 8 if compact_layout else 6
-        counterpart_role_row = 9 if compact_layout else 7
-        date_row = 10 if compact_layout else 8
+        date_row = 3
+        evaluator_row = 4
+        evaluator_actions_row = 5 if compact_layout else 4
+        evaluator_detail_row = 6 if compact_layout else 5
+        combined_evaluator_row = 7 if compact_layout else 6
+        counterpart_row = 8 if compact_layout else 7
+        counterpart_actions_row = 9 if compact_layout else 7
+        counterpart_role_row = 10 if compact_layout else 8
 
         self._create_pill_label(form, "Tipo de informe *").grid(row=0, column=0, sticky=tk.NW, pady=8)
         type_combo = self._create_combo(
@@ -1205,7 +1231,7 @@ class MainApplication:
         location_container.grid(row=2, column=1, sticky="nsew", padx=12, pady=8)
         self._attach_required_validation(self.location_var, location_entry, location_error, "Requerido")
 
-        self._create_pill_label(form, "Evaluador / Responsable *").grid(row=3, column=0, sticky=tk.W, pady=8)
+        self._create_pill_label(form, "Evaluador / Responsable *").grid(row=evaluator_row, column=0, sticky=tk.W, pady=8)
         self.evaluator_combo = self._create_combo(
             form,
             self.evaluator_var,
@@ -1213,7 +1239,7 @@ class MainApplication:
             command=lambda _value=None: self._handle_evaluator_selection(),
             width=280,
         )
-        self.evaluator_combo.grid(row=3, column=1, sticky="nsew", padx=12, pady=8)
+        self.evaluator_combo.grid(row=evaluator_row, column=1, sticky="nsew", padx=12, pady=8)
 
         # Etiqueta de solo lectura que reemplaza el combo en modo combinado
         self._evaluator_combined_label = ctk.CTkLabel(
@@ -1227,7 +1253,7 @@ class MainApplication:
             height=36,
         )
         # Se coloca en la misma celda que el combo pero arranca oculto
-        self._evaluator_combined_label.grid(row=3, column=1, sticky="nsew", padx=12, pady=8)
+        self._evaluator_combined_label.grid(row=evaluator_row, column=1, sticky="nsew", padx=12, pady=8)
         self._evaluator_combined_label.grid_remove()
 
         evaluator_actions = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
@@ -1471,6 +1497,9 @@ class MainApplication:
             anchor="w",
         )
         helper_text.pack(anchor=tk.W, pady=(10, 0))
+
+        # Espaciador inferior para facilitar el desplazamiento en pantallas pequeñas
+        ctk.CTkFrame(frame, fg_color="transparent", height=200).pack(fill=tk.X)
 
     def _reload_evaluators(self, prefer_id=None) -> None:
         """Carga o actualiza el listado de evaluadores desde el repositorio."""
@@ -2476,6 +2505,9 @@ class MainApplication:
             label.pack(anchor=tk.W, pady=4)
             self.content_outline_labels.append(label)
 
+        # Espaciador inferior
+        ctk.CTkFrame(frame, fg_color="transparent", height=150).pack(fill=tk.X)
+
         self._refresh_content_preview()
 
     def _build_additional_sections(self):
@@ -2796,10 +2828,10 @@ class MainApplication:
         fields_frame.grid_columnconfigure(1, weight=1)
 
         field_specs = [
+            ("Fechas del estudio:", self.study_dates_var, "study_date"),
             ("Área evaluada:", self.plant_var, "entry"),
             ("Actividad principal:", self.activity_var, "entry"),
             ("País en que se realizó:", self.country_var, "entry"),
-            ("Fechas del estudio:", self.study_dates_var, "study_date"),
         ]
 
         for idx, (label_text, var, field_type) in enumerate(field_specs):
@@ -2890,6 +2922,9 @@ class MainApplication:
                 self._create_text_entry(fields_frame, var, width=340).grid(
                     row=idx, column=1, sticky=tk.EW, padx=12, pady=8
                 )
+
+        # Espaciador inferior
+        ctk.CTkFrame(frame, fg_color="transparent", height=150).pack(fill=tk.X)
 
     def _build_drafts_section(self, frame: ttk.Frame):
         """Seccion para listar y cargar borradores guardados."""
@@ -3005,6 +3040,10 @@ class MainApplication:
 
         inner_frame = ctk.CTkFrame(canvas, fg_color="transparent", corner_radius=0)
         window_id = canvas.create_window((0, 0), window=inner_frame, anchor="nw")
+        
+        # Espaciador global al final del canvas de resultados
+        self._results_spacer = ctk.CTkFrame(inner_frame, fg_color="transparent", height=200)
+        self._results_spacer.pack(side=tk.BOTTOM, fill=tk.X)
 
         def _update_scroll_region(_event):
             canvas.configure(scrollregion=canvas.bbox("all"))
@@ -3068,6 +3107,9 @@ class MainApplication:
         """
         canvas = self.results_canvas
         if canvas is None:
+            return
+
+        if isinstance(widget, (ttk.Treeview, ttk.Combobox)):
             return
 
         widget.bind("<Enter>", lambda _e: setattr(self, "_active_mousewheel_canvas", canvas), add="+")
@@ -3198,6 +3240,9 @@ class MainApplication:
             "position": tk.StringVar(),
             "result": tk.StringVar(value=default_result),
         }
+        
+        # Espaciador al final de cada bloque de resultados si es necesario, 
+        # pero mejor uno global al final del contenedor de resultados.
 
         form = ctk.CTkFrame(block_body, fg_color="transparent", corner_radius=0)
         form.pack(fill=tk.X)
@@ -3251,7 +3296,7 @@ class MainApplication:
 
         result_row = 4 if compact_layout else 2
         self._create_pill_label(form, "Resultado").grid(row=result_row, column=0, sticky=tk.NW, pady=6)
-        result_container, result_combo, result_error = self._create_validated_combo(
+        result_container, result_combo, result_error = self._create_validated_native_combo(
             form,
             form_vars["result"],
             result_values,
@@ -3490,6 +3535,9 @@ class MainApplication:
 
         self.calibration_tree = tree
         self._refresh_calibration_table()
+        
+        # Espaciador inferior
+        ctk.CTkFrame(frame, fg_color="transparent", height=150).pack(fill=tk.X)
 
     def _add_calibration_file(self):
         """Selecciona y agrega un archivo PDF de certificado."""
@@ -3708,6 +3756,9 @@ class MainApplication:
 
         self._update_test_attachment_state()
 
+        # Espaciador inferior
+        ctk.CTkFrame(frame, fg_color="transparent", height=150).pack(fill=tk.X)
+
         ttk.Separator(frame, orient='horizontal').pack(fill=tk.X, pady=10)
 
     def _add_test_attachment_file(self, dataset_key: str):
@@ -3910,6 +3961,9 @@ class MainApplication:
         self.attendance_tree = tree
         self._refresh_attendance_table()
 
+        # Espaciador inferior
+        ctk.CTkFrame(frame, fg_color="transparent", height=150).pack(fill=tk.X)
+
     def _add_attendance_file(self):
         """Selecciona un PDF para el listado de asistencia."""
 
@@ -4080,6 +4134,9 @@ class MainApplication:
             command=self._reset_recommendations_text_to_default,
         ).pack(side=tk.RIGHT)
 
+        # Espaciador inferior
+        ctk.CTkFrame(frame, fg_color="transparent", height=150).pack(fill=tk.X)
+
     def _build_conclusion_section(self, frame: ttk.Frame):
         """Sección Conclusión con texto editable y plantilla dinámica."""
         for child in frame.winfo_children():
@@ -4119,6 +4176,9 @@ class MainApplication:
             height=34,
             command=self._reset_conclusion_text_to_default,
         ).pack(side=tk.RIGHT)
+
+        # Espaciador inferior
+        ctk.CTkFrame(frame, fg_color="transparent", height=150).pack(fill=tk.X)
 
     def _reset_recommendations_text_to_default(self, prompt: bool = True):
         """Restablece el texto con la plantilla de recomendaciones adecuada."""
