@@ -304,6 +304,22 @@ class MainApplication:
                 height=height,
             )
 
+    def _toggle_sidebar(self):
+        """Oculta o muestra el panel lateral de secciones."""
+
+        if self._sidebar_visible:
+            self.menu_frame.pack_forget()
+            self._sidebar_toggle_btn.configure(text="\u25b6")
+            self._sidebar_visible = False
+        else:
+            # Re-insertar el sidebar en su posición original (antes del contenido)
+            self.menu_frame.pack(
+                side=tk.LEFT, fill=tk.Y, padx=(0, 16),
+                before=self.sections_container,
+            )
+            self._sidebar_toggle_btn.configure(text="\u25c0")
+            self._sidebar_visible = True
+
     def _get_adaptive_display_settings(self):
         """Calcula escala y dimensiones iniciales adaptadas a la pantalla."""
 
@@ -1026,6 +1042,27 @@ class MainApplication:
 
         body_frame = ctk.CTkFrame(content_frame, fg_color=self.colors["bg"], corner_radius=0)
         body_frame.pack(fill=tk.BOTH, expand=True)
+        self.body_frame = body_frame
+
+        # --- Sidebar toggle button ---
+        self._sidebar_visible = True
+        toggle_frame = ctk.CTkFrame(body_frame, fg_color="transparent", corner_radius=0, width=28)
+        toggle_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 2))
+        toggle_frame.pack_propagate(False)
+        self._sidebar_toggle_btn = ctk.CTkButton(
+            toggle_frame,
+            text="◀",
+            fg_color=primary_muted,
+            text_color=primary,
+            hover_color="#D4EDDA",
+            font=ctk.CTkFont("Segoe UI", 14, "bold"),
+            corner_radius=6,
+            width=24,
+            height=60,
+            command=self._toggle_sidebar,
+        )
+        self._sidebar_toggle_btn.pack(pady=(40, 0))
+        self._sidebar_toggle_frame = toggle_frame
 
         menu_width = self._compute_menu_width()
 
@@ -1112,7 +1149,7 @@ class MainApplication:
                 fg_color="transparent",
                 text_color=primary,
                 hover_color=primary_muted,
-                font=ctk.CTkFont("Segoe UI", 11),
+                font=ctk.CTkFont("Segoe UI", 12),
                 corner_radius=8,
                 height=36,
                 anchor="w",
@@ -3180,6 +3217,11 @@ class MainApplication:
 
         if delta:
             canvas.yview_scroll(delta, "units")
+            # Forzar repintado para evitar artefactos visuales en pantallas con escalado alto
+            try:
+                canvas.update_idletasks()
+            except Exception:
+                pass
             return "break"
         return None
 
@@ -3249,80 +3291,73 @@ class MainApplication:
 
         form = ctk.CTkFrame(block_body, fg_color="transparent", corner_radius=0)
         form.pack(fill=tk.X)
-        compact_layout = self._responsive_mode == "compact"
         form.grid_columnconfigure(1, weight=1)
-        if not compact_layout:
-            form.grid_columnconfigure(3, weight=1)
 
-        self._create_pill_label(form, "Nombre completo").grid(row=0, column=0, sticky=tk.NW, pady=6)
+        # --- Row 0: Nombre + Cédula side by side ---
+        row0 = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
+        row0.pack(fill=tk.X, pady=4)
+        row0.grid_columnconfigure(1, weight=1)
+        row0.grid_columnconfigure(3, weight=1)
+
+        self._create_pill_label(row0, "Nombre completo").grid(row=0, column=0, sticky=tk.NW, pady=6)
         name_container, name_entry, name_error = self._create_validated_entry(
-            form, form_vars["name"], width=280
+            row0, form_vars["name"], width=280
         )
         name_container.grid(row=0, column=1, sticky="nsew", padx=12, pady=6)
         name_validator = self._attach_required_validation(form_vars["name"], name_entry, name_error, "Requerido")
 
-        id_row = 1 if compact_layout else 0
-        id_label_col = 0 if compact_layout else 2
-        id_value_col = 1 if compact_layout else 3
-        self._create_pill_label(form, "Cédula").grid(row=id_row, column=id_label_col, sticky=tk.NW, pady=6)
+        self._create_pill_label(row0, "Cédula").grid(row=0, column=2, sticky=tk.NW, pady=6)
         id_container, id_entry, id_error = self._create_validated_entry(
-            form, form_vars["identification"], width=220
+            row0, form_vars["identification"], width=220
         )
-        id_container.grid(row=id_row, column=id_value_col, sticky="nsew", padx=12, pady=6)
+        id_container.grid(row=0, column=3, sticky="nsew", padx=12, pady=6)
         id_validator = self._attach_id_validation(form_vars["identification"], id_entry, id_error)
 
-        age_row = 2 if compact_layout else 1
-        self._create_pill_label(form, "Edad").grid(row=age_row, column=0, sticky=tk.NW, pady=6)
+        # --- Row 1: Edad + Área side by side ---
+        row1 = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
+        row1.pack(fill=tk.X, pady=4)
+        row1.grid_columnconfigure(1, weight=0)
+        row1.grid_columnconfigure(3, weight=1)
+
+        self._create_pill_label(row1, "Edad").grid(row=0, column=0, sticky=tk.NW, pady=6)
         age_container, age_entry, age_error = self._create_validated_entry(
-            form, form_vars["age"], width=120
+            row1, form_vars["age"], width=120
         )
-        age_container.grid(row=age_row, column=1, sticky=tk.NW, padx=12, pady=6)
+        age_container.grid(row=0, column=1, sticky=tk.NW, padx=12, pady=6)
         age_entry.configure(validate="key", validatecommand=(self.numeric_validation_cmd, "%P"))
         age_validator = self._attach_numeric_validation(form_vars["age"], age_entry, age_error, "Solo numeros")
 
-        position_row = 3 if compact_layout else 1
-        position_label_col = 0 if compact_layout else 2
-        position_value_col = 1 if compact_layout else 3
-        self._create_pill_label(form, "Área").grid(
-            row=position_row,
-            column=position_label_col,
-            sticky=tk.NW,
-            pady=6,
-        )
+        self._create_pill_label(row1, "Área").grid(row=0, column=2, sticky=tk.NW, pady=6)
         position_container, position_entry, position_error = self._create_validated_entry(
-            form, form_vars["position"], width=220
+            row1, form_vars["position"], width=220
         )
-        position_container.grid(row=position_row, column=position_value_col, sticky="nsew", padx=12, pady=6)
+        position_container.grid(row=0, column=3, sticky="nsew", padx=12, pady=6)
         position_validator = self._attach_required_validation(
             form_vars["position"], position_entry, position_error, "Requerido"
         )
 
-        result_row = 4 if compact_layout else 2
-        self._create_pill_label(form, "Resultado").grid(row=result_row, column=0, sticky=tk.NW, pady=6)
+        # --- Row 2: Resultado (full width) ---
+        row2 = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
+        row2.pack(fill=tk.X, pady=4)
+        row2.grid_columnconfigure(1, weight=1)
+
+        self._create_pill_label(row2, "Resultado").grid(row=0, column=0, sticky=tk.NW, pady=6)
         result_container, result_combo, result_error = self._create_validated_native_combo(
-            form,
+            row2,
             form_vars["result"],
             result_values,
             command=lambda _value=None, key=dataset_key: self._update_result_preview(key),
-            width=420,
+            width=600,
         )
-        result_container.grid(row=result_row, column=1, sticky=tk.NW, padx=12, pady=6)
+        result_container.grid(row=0, column=1, sticky="nsew", padx=12, pady=6)
         result_validator = self._attach_required_validation(
             form_vars["result"], result_combo, result_error, "Requerido"
         )
 
+        # --- Row 3: Preview label (full width) ---
         preview_container = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
-        preview_row = 5 if compact_layout else 3
-        preview_col = 1
-        preview_span = 1 if compact_layout else 3
-        preview_container.grid(
-            row=preview_row,
-            column=preview_col,
-            columnspan=preview_span,
-            sticky=tk.NW,
-            padx=12,
-            pady=6,
-        )
+        preview_container.pack(fill=tk.X, pady=(2, 4), padx=12)
+
         ctk.CTkLabel(
             preview_container,
             text="Color del resultado",
@@ -3332,18 +3367,14 @@ class MainApplication:
         preview_label = ctk.CTkLabel(
             preview_container,
             text="",
-            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            font=ctk.CTkFont("Segoe UI", 14, "bold"),
             corner_radius=999,
-            height=32,
+            height=36,
             fg_color=self.colors["field_bg"],
             text_color=self.colors["text"],
-            padx=16,
+            padx=20,
         )
         preview_label.pack(anchor=tk.W, pady=(4, 0))
-
-        form.columnconfigure(1, weight=1)
-        if not compact_layout:
-            form.columnconfigure(3, weight=1)
 
         button_frame = ctk.CTkFrame(block_body, fg_color="transparent", corner_radius=0)
         button_frame.pack(fill=tk.X, pady=(8, 4))
@@ -3353,9 +3384,9 @@ class MainApplication:
             fg_color=self.colors["primary"],
             text_color=self.colors["surface"],
             hover_color=self.colors["primary_dark"],
-            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
             corner_radius=10,
-            height=34,
+            height=38,
             command=lambda key=dataset_key: self._add_result_entry(key),
         ).pack(side=tk.LEFT, padx=4)
         ctk.CTkButton(
@@ -3364,9 +3395,9 @@ class MainApplication:
             fg_color=self.colors["primary_muted"],
             text_color=self.colors["primary"],
             hover_color="#D4EDDA",
-            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
             corner_radius=10,
-            height=34,
+            height=38,
             command=lambda key=dataset_key: self._remove_selected_entry(key),
         ).pack(side=tk.LEFT, padx=4)
         ctk.CTkButton(
@@ -3377,9 +3408,9 @@ class MainApplication:
             border_width=1,
             border_color=self.colors["primary"],
             hover_color=self.colors["primary_muted"],
-            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
             corner_radius=10,
-            height=34,
+            height=38,
             command=lambda key=dataset_key: self._clear_results_entries(key),
         ).pack(side=tk.LEFT, padx=4)
 
