@@ -2432,9 +2432,14 @@ class PDFGenerator:
                 f"el {moderadas_pct:.0f}% evidencia compromiso moderado y el {grave_pct:.0f}% corresponde a casos graves."
             )
 
-        normal_pct = pct_for("normal")
-        unilateral_pct = pct_for("caida_unilateral")
-        bilateral_pct = pct_for("caida_bilateral")
+        scheme = RESULT_SCHEMES.get(dataset_key, RESULT_SCHEMES["audiometria"])
+        normal_keys = [opt["key"] for opt in scheme.get("options", []) if opt.get("chart_group") == "normal"]
+        unilateral_keys = [opt["key"] for opt in scheme.get("options", []) if opt.get("chart_group") == "unilateral"]
+        bilateral_keys = [opt["key"] for opt in scheme.get("options", []) if opt.get("chart_group") == "bilateral"]
+
+        normal_pct = pct_for(normal_keys)
+        unilateral_pct = pct_for(unilateral_keys)
+        bilateral_pct = pct_for(bilateral_keys)
         return (
             f"En base a los colaboradores evaluados, el {normal_pct:.0f}% presenta respuestas dentro de los límites normales, "
             f"el {unilateral_pct:.0f}% requiere vigilancia auditiva por caída unilateral y el {bilateral_pct:.0f}% presenta caída bilateral."
@@ -2459,10 +2464,24 @@ class PDFGenerator:
             return None
 
         segments = []
-        for option in scheme.get("options", []):
-            key = option.get("key")
-            label = option.get("chart_label") or option.get("label") or key
-            segments.append((label, stats.get(key, 0), key, option))
+        if dataset_key == "audiometria":
+            groups = {
+                "normal": {"label": "Normal bilateral", "count": 0},
+                "unilateral": {"label": "Caída unilateral", "count": 0},
+                "bilateral": {"label": "Caída bilateral", "count": 0},
+            }
+            for option in scheme.get("options", []):
+                key = option.get("key")
+                grp = option.get("chart_group")
+                if grp in groups:
+                    groups[grp]["count"] += stats.get(key, 0)
+            for grp, data in groups.items():
+                segments.append((data["label"], data["count"], grp, {}))
+        else:
+            for option in scheme.get("options", []):
+                key = option.get("key")
+                label = option.get("chart_label") or option.get("label") or key
+                segments.append((label, stats.get(key, 0), key, option))
 
         total_count = sum(val for _label, val, _code, _opt in segments)
 
