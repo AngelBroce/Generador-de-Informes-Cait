@@ -533,7 +533,8 @@ class MainApplication:
             text_color=self.colors["text"],
             button_color=self.colors["primary"],
             button_hover_color=self.colors["primary_dark"],
-            font=ctk.CTkFont("Segoe UI", 13),
+            font=ctk.CTkFont("Segoe UI", 14),
+            dropdown_font=ctk.CTkFont("Segoe UI", 14),
         )
         self._bind_combo_click_anywhere(combo)
         return combo
@@ -571,7 +572,7 @@ class MainApplication:
         return container, combo, error_label
 
     def _create_native_combo(self, parent, text_var: tk.StringVar, values: list[str], command=None, width: int = 260):
-        """Combo nativo para permitir scroll con la rueda del ratón."""
+        """Combo nativo para permitir scroll vertical visible y lista de opciones amplia."""
         width_chars = int(self._responsive_field_width(width) / 10)
         combo = ttk.Combobox(
             parent,
@@ -579,8 +580,10 @@ class MainApplication:
             values=values,
             state="readonly",
             width=width_chars,
-            font=("Segoe UI", 12)
+            font=("Segoe UI", 14)
         )
+        # Esto asegura que la lista desplegable tenga la letra grande para la persona
+        parent.option_add("*TCombobox*Listbox.font", "Segoe\ UI 14")
         if command:
             combo.bind("<<ComboboxSelected>>", lambda e: command(combo.get()))
         return combo
