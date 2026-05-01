@@ -735,7 +735,7 @@ class PDFGenerator:
             {"key": "name", "title": "NOMBRE", "ratio": 0.27, "align": "left"},
             {"key": "identification", "title": "CÉDULA", "ratio": 0.16, "align": "center"},
             {"key": "age", "title": "EDAD", "ratio": 0.09, "align": "center"},
-            {"key": "position", "title": "CARGO", "ratio": 0.20, "align": "left"},
+            {"key": "position", "title": "ÁREA", "ratio": 0.20, "align": "left"},
             {"key": "result", "title": "RESULTADO", "ratio": 0.22, "align": "center"},
         ]
         column_widths = [table_width * col["ratio"] for col in columns]

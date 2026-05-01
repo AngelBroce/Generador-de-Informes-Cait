@@ -3172,11 +3172,11 @@ class MainApplication:
 
         delta = 0
         if getattr(event, "delta", 0):
-            delta = int(-1 * (event.delta / 120))
+            delta = int(-1 * (event.delta / 120)) * 3
         elif getattr(event, "num", None) == 5:
-            delta = 1
+            delta = 3
         elif getattr(event, "num", None) == 4:
-            delta = -1
+            delta = -3
 
         if delta:
             canvas.yview_scroll(delta, "units")
@@ -3283,7 +3283,7 @@ class MainApplication:
         position_row = 3 if compact_layout else 1
         position_label_col = 0 if compact_layout else 2
         position_value_col = 1 if compact_layout else 3
-        self._create_pill_label(form, "Cargo").grid(
+        self._create_pill_label(form, "Área").grid(
             row=position_row,
             column=position_label_col,
             sticky=tk.NW,
@@ -3304,7 +3304,7 @@ class MainApplication:
             form_vars["result"],
             result_values,
             command=lambda _value=None, key=dataset_key: self._update_result_preview(key),
-            width=240,
+            width=420,
         )
         result_container.grid(row=result_row, column=1, sticky=tk.NW, padx=12, pady=6)
         result_validator = self._attach_required_validation(
@@ -3312,9 +3312,9 @@ class MainApplication:
         )
 
         preview_container = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
-        preview_row = 5 if compact_layout else 2
-        preview_col = 1 if compact_layout else 2
-        preview_span = 1 if compact_layout else 2
+        preview_row = 5 if compact_layout else 3
+        preview_col = 1
+        preview_span = 1 if compact_layout else 3
         preview_container.grid(
             row=preview_row,
             column=preview_col,
@@ -3326,18 +3326,18 @@ class MainApplication:
         ctk.CTkLabel(
             preview_container,
             text="Color del resultado",
-            font=ctk.CTkFont("Segoe UI", 10),
+            font=ctk.CTkFont("Segoe UI", 12),
             text_color=self.colors["text_muted"],
         ).pack(anchor=tk.W)
         preview_label = ctk.CTkLabel(
             preview_container,
             text="",
-            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
             corner_radius=999,
-            height=28,
+            height=32,
             fg_color=self.colors["field_bg"],
             text_color=self.colors["text"],
-            padx=12,
+            padx=16,
         )
         preview_label.pack(anchor=tk.W, pady=(4, 0))
 
@@ -3413,7 +3413,7 @@ class MainApplication:
             "name": "Nombre",
             "identification": "Cédula",
             "age": "Edad",
-            "position": "Cargo",
+            "position": "Área",
             "result": "Resultado",
         }
         for column, title in headings.items():
