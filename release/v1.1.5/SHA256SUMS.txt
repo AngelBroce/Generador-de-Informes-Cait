@@ -1,0 +1,2 @@
+e5c7cb07a379f0fdf0e7d756b4acc6f7f1e36b03f5035a5043525c5a5e35df61  CAIT_Informes_Setup_v1.1.5.exe
+9ef2a0be6b85adef99f2afc85d6092b56bc4446d60b4d2099078e6325ce27716  CAIT_Informes_Portable_v1.1.5.zip

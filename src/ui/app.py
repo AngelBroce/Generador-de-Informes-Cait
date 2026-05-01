@@ -24,6 +24,7 @@ from src.core.report_outline import get_content_outline
 from src.core.result_schemes import RESULT_SCHEMES
 from src.services.evaluators_repository import EvaluatorRepository, build_technical_details
 from src.services.counterparts_repository import CounterpartRepository
+from src.services.persons_repository import PersonsRepository
 
 
 class MainApplication:
@@ -136,6 +137,9 @@ class MainApplication:
         (self.data_root / "exports").mkdir(parents=True, exist_ok=True)
         (self.data_root / "attachments").mkdir(parents=True, exist_ok=True)
         (self.data_root / "databases").mkdir(parents=True, exist_ok=True)
+
+        # Mini base de datos de personas evaluadas
+        self.persons_repo = PersonsRepository()
 
         # Catálogo de evaluadores cargado desde JSON
         self.evaluators_repo = EvaluatorRepository()
@@ -3274,9 +3278,39 @@ class MainApplication:
         block_card, block_body = self._create_card(parent, padding=12)
         block_card.pack(fill=tk.BOTH, expand=True, pady=10)
 
-        title_row = ctk.CTkFrame(block_body, fg_color="transparent", corner_radius=0)
-        title_row.pack(fill=tk.X, pady=(0, 8))
-        self._create_pill_label(title_row, scheme["title"]).pack(anchor=tk.W)
+        # --- Encabezado visual prominente del bloque ---
+        # Determinar el tipo de prueba a mostrar con nombre claro
+        _type_labels = {
+            "audiometria": "🎧  AUDIOMETRÍA",
+            "espirometria": "🫁  ESPIROMETRÍA",
+        }
+        _type_display = _type_labels.get(dataset_key, dataset_key.upper())
+
+        header_band = ctk.CTkFrame(
+            block_body,
+            fg_color=self.colors["primary"],
+            corner_radius=10,
+        )
+        header_band.pack(fill=tk.X, pady=(0, 12))
+
+        header_inner = ctk.CTkFrame(header_band, fg_color="transparent", corner_radius=0)
+        header_inner.pack(fill=tk.X, padx=16, pady=10)
+
+        ctk.CTkLabel(
+            header_inner,
+            text=_type_display,
+            font=ctk.CTkFont("Segoe UI", 18, "bold"),
+            text_color="#FFFFFF",
+            anchor="w",
+        ).pack(anchor=tk.W)
+
+        ctk.CTkLabel(
+            header_inner,
+            text=scheme["title"],
+            font=ctk.CTkFont("Segoe UI", 11),
+            text_color="#C8E6C9",
+            anchor="w",
+        ).pack(anchor=tk.W)
 
         form_vars = {
             "name": tk.StringVar(),
@@ -3312,6 +3346,34 @@ class MainApplication:
         )
         id_container.grid(row=0, column=3, sticky="nsew", padx=12, pady=6)
         id_validator = self._attach_id_validation(form_vars["identification"], id_entry, id_error)
+
+        # Autocompletado por cédula: detecta persona existente al escribir
+        def _check_person_autofill(*_args, _key=dataset_key, _vars=form_vars):
+            raw_id = _vars["identification"].get().strip()
+            if not raw_id or len(raw_id) < 5:
+                return
+            person = self.persons_repo.get_by_id(raw_id)
+            if person is None:
+                return
+            # Preguntar si desea autocompletar
+            if _vars["name"].get().strip():
+                # Si ya hay un nombre, no interrumpir
+                return
+            answer = messagebox.askyesno(
+                "Persona encontrada",
+                f"La cédula {raw_id} ya está registrada:\n\n"
+                f"  Nombre: {person.get('name', '')}\n"
+                f"  Área:   {person.get('position', '')}\n"
+                f"  Edad:   {person.get('age', '')}\n\n"
+                "¿Deseas autocompletar con estos datos?",
+            )
+            if answer:
+                _vars["name"].set(person.get("name", ""))
+                _vars["age"].set(person.get("age", ""))
+                _vars["position"].set(person.get("position", ""))
+                # El resultado se deja en blanco para que el usuario lo cambie
+
+        form_vars["identification"].trace_add("write", _check_person_autofill)
 
         # --- Row 1: Edad + Área side by side ---
         row1 = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
@@ -3353,6 +3415,26 @@ class MainApplication:
         result_validator = self._attach_required_validation(
             form_vars["result"], result_combo, result_error, "Requerido"
         )
+
+        # El scroll sobre el combo de resultado NUNCA cambia el valor:
+        # siempre redirige al canvas para desplazar la vista.
+        def _block_result_scroll(event):
+            canvas = self.results_canvas
+            if canvas:
+                delta = 0
+                if getattr(event, "delta", 0):
+                    delta = int(-1 * (event.delta / 120)) * 3
+                elif getattr(event, "num", None) == 5:
+                    delta = 3
+                elif getattr(event, "num", None) == 4:
+                    delta = -3
+                if delta:
+                    canvas.yview_scroll(delta, "units")
+            return "break"
+
+        result_combo.bind("<MouseWheel>", _block_result_scroll, add=False)
+        result_combo.bind("<Button-4>", _block_result_scroll, add=False)
+        result_combo.bind("<Button-5>", _block_result_scroll, add=False)
 
         # --- Row 3: Preview label (full width) ---
         preview_container = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
@@ -3574,17 +3656,18 @@ class MainApplication:
         ctk.CTkFrame(frame, fg_color="transparent", height=150).pack(fill=tk.X)
 
     def _add_calibration_file(self):
-        """Selecciona y agrega un archivo PDF de certificado."""
+        """Selecciona y agrega uno o varios archivos PDF de certificado."""
 
-        file_path = filedialog.askopenfilename(
-            title="Selecciona el certificado en PDF",
+        selected = filedialog.askopenfilenames(
+            title="Selecciona uno o varios certificados en PDF",
             filetypes=(("PDF", "*.pdf"), ("Todos los archivos", "*.*")),
         )
-        if not file_path:
+        if not selected:
             return
 
-        if file_path not in self.calibration_files:
-            self.calibration_files.append(file_path)
+        for file_path in selected:
+            if file_path not in self.calibration_files:
+                self.calibration_files.append(file_path)
         self._refresh_calibration_table()
 
     def _remove_selected_calibration_file(self):
@@ -3796,18 +3879,19 @@ class MainApplication:
         ttk.Separator(frame, orient='horizontal').pack(fill=tk.X, pady=10)
 
     def _add_test_attachment_file(self, dataset_key: str):
-        """Agrega un PDF de audiometría o espirometría."""
+        """Agrega uno o varios PDF de audiometría o espirometría."""
 
         files = self.test_attachment_files.setdefault(dataset_key, [])
-        file_path = filedialog.askopenfilename(
-            title="Selecciona el archivo PDF",
+        selected = filedialog.askopenfilenames(
+            title="Selecciona uno o varios archivos PDF",
             filetypes=(("PDF", "*.pdf"), ("Todos los archivos", "*.*")),
         )
-        if not file_path:
+        if not selected:
             return
 
-        if file_path not in files:
-            files.append(file_path)
+        for file_path in selected:
+            if file_path not in files:
+                files.append(file_path)
         self._refresh_test_attachment_table(dataset_key)
 
     def _open_selected_test_attachment_file(self, dataset_key: str):
@@ -3999,17 +4083,18 @@ class MainApplication:
         ctk.CTkFrame(frame, fg_color="transparent", height=150).pack(fill=tk.X)
 
     def _add_attendance_file(self):
-        """Selecciona un PDF para el listado de asistencia."""
+        """Selecciona uno o varios PDF para el listado de asistencia."""
 
-        file_path = filedialog.askopenfilename(
-            title="Selecciona el listado en PDF",
+        selected = filedialog.askopenfilenames(
+            title="Selecciona uno o varios listados en PDF",
             filetypes=(("PDF", "*.pdf"), ("Todos los archivos", "*.*")),
         )
-        if not file_path:
+        if not selected:
             return
 
-        if file_path not in self.attendance_files:
-            self.attendance_files.append(file_path)
+        for file_path in selected:
+            if file_path not in self.attendance_files:
+                self.attendance_files.append(file_path)
         self._refresh_attendance_table()
 
     def _open_selected_attendance_file(self):
@@ -4147,9 +4232,9 @@ class MainApplication:
             card_body,
             height=16,
             wrap=tk.WORD,
-            font=("Segoe UI", 11),
-            padx=12,
-            pady=12,
+            font=("Segoe UI", 15),
+            padx=16,
+            pady=14,
         )
         self.recommendations_text_widget.pack(fill=tk.BOTH, expand=True)
         self._reset_recommendations_text_to_default(prompt=False)
@@ -4158,13 +4243,13 @@ class MainApplication:
         button_frame.pack(anchor=tk.E, pady=10)
         ctk.CTkButton(
             button_frame,
-            text="Regenerar texto sugerido",
+            text="🔄 Regenerar texto sugerido",
             fg_color=self.colors["primary_muted"],
             text_color=self.colors["primary"],
             hover_color="#D4EDDA",
-            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
             corner_radius=10,
-            height=34,
+            height=38,
             command=self._reset_recommendations_text_to_default,
         ).pack(side=tk.RIGHT)
 
@@ -4172,14 +4257,14 @@ class MainApplication:
         ctk.CTkFrame(frame, fg_color="transparent", height=150).pack(fill=tk.X)
 
     def _build_conclusion_section(self, frame: ttk.Frame):
-        """Sección Conclusión con texto editable y plantilla dinámica."""
+        """Sección Conclusión con texto editable, plantilla dinámica y guardado de plantillas."""
         for child in frame.winfo_children():
             child.destroy()
 
         header = self._create_section_header(
             frame,
             "Conclusión del informe",
-            "Puedes mantener el texto sugerido o personalizarlo segun el informe.",
+            "Puedes mantener el texto sugerido, personalizarlo o guardar tu propia plantilla.",
         )
         header.pack(anchor=tk.W, pady=(0, 16), fill=tk.X)
 
@@ -4190,26 +4275,53 @@ class MainApplication:
             card_body,
             height=18,
             wrap=tk.WORD,
-            font=("Segoe UI", 11),
-            padx=12,
-            pady=12,
+            font=("Segoe UI", 15),
+            padx=16,
+            pady=14,
         )
         self.conclusion_text_widget.pack(fill=tk.BOTH, expand=True)
         self._reset_conclusion_text_to_default(prompt=False)
 
         button_frame = ctk.CTkFrame(frame, fg_color="transparent", corner_radius=0)
-        button_frame.pack(anchor=tk.E, pady=10)
+        button_frame.pack(fill=tk.X, pady=10)
+
         ctk.CTkButton(
             button_frame,
-            text="Regenerar texto sugerido",
+            text="💾 Guardar como mi plantilla",
+            fg_color=self.colors["primary"],
+            text_color=self.colors["surface"],
+            hover_color=self.colors["primary_dark"],
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+            corner_radius=10,
+            height=38,
+            command=self._save_conclusion_as_template,
+        ).pack(side=tk.LEFT, padx=4)
+
+        ctk.CTkButton(
+            button_frame,
+            text="📂 Cargar mi plantilla",
             fg_color=self.colors["primary_muted"],
             text_color=self.colors["primary"],
             hover_color="#D4EDDA",
-            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
             corner_radius=10,
-            height=34,
+            height=38,
+            command=self._load_conclusion_from_template,
+        ).pack(side=tk.LEFT, padx=4)
+
+        ctk.CTkButton(
+            button_frame,
+            text="🔄 Regenerar texto automático",
+            fg_color="transparent",
+            text_color=self.colors["primary"],
+            border_width=1,
+            border_color=self.colors["primary"],
+            hover_color=self.colors["primary_muted"],
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+            corner_radius=10,
+            height=38,
             command=self._reset_conclusion_text_to_default,
-        ).pack(side=tk.RIGHT)
+        ).pack(side=tk.LEFT, padx=4)
 
         # Espaciador inferior
         ctk.CTkFrame(frame, fg_color="transparent", height=150).pack(fill=tk.X)
@@ -4429,6 +4541,198 @@ class MainApplication:
                 return current_text
         return self._generate_recommendations_template()
 
+    # ------------------------------------------------------------------
+    # Plantillas de conclusión guardadas por el usuario
+    # ------------------------------------------------------------------
+    def _conclusion_template_path(self) -> Path:
+        """Ruta del archivo JSON donde se guardan las plantillas de conclusión."""
+        return self.data_root / "databases" / "conclusion_templates.json"
+
+    def _save_conclusion_as_template(self) -> None:
+        """Guarda el texto actual de la conclusión como plantilla reutilizable."""
+        if not self.conclusion_text_widget:
+            return
+        text = self.conclusion_text_widget.get("1.0", tk.END).strip()
+        if not text:
+            messagebox.showwarning("Sin contenido", "Escribe algo en la conclusión antes de guardarlo como plantilla.")
+            return
+
+        # Abrir ventana para que el usuario dé un nombre a la plantilla
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("Guardar plantilla de conclusión")
+        dialog.geometry("460x220")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        bg = ctk.CTkFrame(dialog, fg_color=self.colors["bg"])
+        bg.pack(fill=tk.BOTH, expand=True)
+
+        ctk.CTkLabel(
+            bg,
+            text="Nombre de la plantilla:",
+            font=ctk.CTkFont("Segoe UI", 13, "bold"),
+            text_color=self.colors["text"],
+            anchor="w",
+        ).pack(anchor=tk.W, padx=20, pady=(20, 6))
+
+        name_var = tk.StringVar()
+        name_entry = ctk.CTkEntry(
+            bg, textvariable=name_var, width=380,
+            font=ctk.CTkFont("Segoe UI", 13),
+            placeholder_text="Ej. Conclusión audiometría estándar",
+        )
+        name_entry.pack(padx=20, pady=(0, 16))
+        name_entry.focus()
+
+        def _do_save():
+            template_name = name_var.get().strip()
+            if not template_name:
+                messagebox.showwarning("Nombre requerido", "Ingresa un nombre para la plantilla.", parent=dialog)
+                return
+            path = self._conclusion_template_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                templates = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+            except (json.JSONDecodeError, OSError):
+                templates = {}
+            templates[template_name] = text
+            path.write_text(json.dumps(templates, ensure_ascii=False, indent=2), encoding="utf-8")
+            dialog.destroy()
+            messagebox.showinfo("Plantilla guardada", f"La plantilla '{template_name}' fue guardada correctamente.")
+
+        btn_row = ctk.CTkFrame(bg, fg_color="transparent")
+        btn_row.pack(fill=tk.X, padx=20, pady=(0, 10))
+        ctk.CTkButton(
+            btn_row, text="Guardar",
+            fg_color=self.colors["primary"], text_color=self.colors["surface"],
+            hover_color=self.colors["primary_dark"],
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            corner_radius=10, height=38,
+            command=_do_save,
+        ).pack(side=tk.LEFT, padx=(0, 8))
+        ctk.CTkButton(
+            btn_row, text="Cancelar",
+            fg_color="transparent", text_color=self.colors["primary"],
+            border_width=1, border_color=self.colors["primary"],
+            hover_color=self.colors["primary_muted"],
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            corner_radius=10, height=38,
+            command=dialog.destroy,
+        ).pack(side=tk.LEFT)
+
+    def _load_conclusion_from_template(self) -> None:
+        """Muestra las plantillas guardadas para aplicar una al texto actual."""
+        path = self._conclusion_template_path()
+        if not path.exists():
+            messagebox.showinfo("Sin plantillas", "Aún no hay plantillas guardadas. Escribe una conclusión y usa 'Guardar como mi plantilla'.")
+            return
+        try:
+            templates: dict = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            messagebox.showerror("Error", "No se pudo leer el archivo de plantillas.")
+            return
+
+        if not templates:
+            messagebox.showinfo("Sin plantillas", "El archivo de plantillas está vacío.")
+            return
+
+        # Ventana de selección
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("Cargar plantilla de conclusión")
+        dialog.geometry("560x400")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        bg = ctk.CTkFrame(dialog, fg_color=self.colors["bg"])
+        bg.pack(fill=tk.BOTH, expand=True)
+
+        ctk.CTkLabel(
+            bg,
+            text="Selecciona una plantilla guardada:",
+            font=ctk.CTkFont("Segoe UI", 13, "bold"),
+            text_color=self.colors["text"],
+            anchor="w",
+        ).pack(anchor=tk.W, padx=20, pady=(16, 8))
+
+        list_frame = ctk.CTkFrame(bg, fg_color=self.colors["surface"], corner_radius=10)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 10))
+
+        columns = ("name",)
+        tree = ttk.Treeview(list_frame, columns=columns, show="headings", height=10)
+        tree.heading("name", text="Nombre de la plantilla")
+        tree.column("name", width=480, anchor=tk.W)
+        tree.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+
+        for template_name in templates.keys():
+            tree.insert("", tk.END, iid=template_name, values=(template_name,))
+
+        btn_row = ctk.CTkFrame(bg, fg_color="transparent")
+        btn_row.pack(fill=tk.X, padx=20, pady=(0, 14))
+
+        def _do_apply():
+            selected = tree.selection()
+            if not selected:
+                messagebox.showinfo("Sin selección", "Selecciona una plantilla para aplicarla.", parent=dialog)
+                return
+            template_name = selected[0]
+            content = templates.get(template_name, "")
+            if content and self.conclusion_text_widget:
+                if self.conclusion_text_widget.get("1.0", tk.END).strip():
+                    confirm = messagebox.askyesno(
+                        "Reemplazar texto",
+                        "Se reemplazará el texto actual de la conclusión. ¿Continuar?",
+                        parent=dialog,
+                    )
+                    if not confirm:
+                        return
+                self.conclusion_text_widget.delete("1.0", tk.END)
+                self.conclusion_text_widget.insert("1.0", content)
+            dialog.destroy()
+
+        def _do_delete():
+            selected = tree.selection()
+            if not selected:
+                return
+            template_name = selected[0]
+            confirm = messagebox.askyesno(
+                "Eliminar plantilla",
+                f"¿Eliminar la plantilla '{template_name}'?",
+                parent=dialog,
+            )
+            if not confirm:
+                return
+            templates.pop(template_name, None)
+            path.write_text(json.dumps(templates, ensure_ascii=False, indent=2), encoding="utf-8")
+            tree.delete(template_name)
+
+        ctk.CTkButton(
+            btn_row, text="Aplicar plantilla",
+            fg_color=self.colors["primary"], text_color=self.colors["surface"],
+            hover_color=self.colors["primary_dark"],
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            corner_radius=10, height=38,
+            command=_do_apply,
+        ).pack(side=tk.LEFT, padx=(0, 8))
+        ctk.CTkButton(
+            btn_row, text="🗑️ Eliminar seleccionada",
+            fg_color="transparent", text_color=self.colors["error"],
+            border_width=1, border_color=self.colors["error"],
+            hover_color="#ffebee",
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            corner_radius=10, height=38,
+            command=_do_delete,
+        ).pack(side=tk.LEFT, padx=(0, 8))
+        ctk.CTkButton(
+            btn_row, text="Cerrar",
+            fg_color="transparent", text_color=self.colors["primary"],
+            border_width=1, border_color=self.colors["primary"],
+            hover_color=self.colors["primary_muted"],
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            corner_radius=10, height=38,
+            command=dialog.destroy,
+        ).pack(side=tk.LEFT)
+
     def _configure_result_tags(self, dataset_key: str):
         """Configura los colores de fila asociados a cada tipo de resultado."""
 
@@ -4522,6 +4826,19 @@ class MainApplication:
         self.evaluated_entries.setdefault(dataset_key, []).append(entry)
         self._refresh_results_table(dataset_key)
         self._sync_report_evaluated()
+
+        # --- Guardar persona en la mini base de datos ---
+        try:
+            self.persons_repo.upsert({
+                "identification": identification,
+                "name": name,
+                "age": age,
+                "position": position,
+                "last_result_label": palette["label"],
+                "last_test_type": dataset_key,
+            })
+        except Exception:
+            pass  # No interrumpir el flujo si falla el guardado
 
         form_vars["name"].set("")
         form_vars["identification"].set("")
@@ -5142,6 +5459,26 @@ class MainApplication:
             if key in self.evaluated_entries and isinstance(entries, list):
                 self.evaluated_entries[key] = entries
 
+        # Sincronizar personas del borrador con la mini base de datos:
+        # solo agrega las que aún no están registradas (no sobreescribe).
+        for key, entries in self.evaluated_entries.items():
+            for entry in entries:
+                identification = (entry.get("identification") or "").strip().upper()
+                if not identification:
+                    continue
+                try:
+                    if self.persons_repo.get_by_id(identification) is None:
+                        self.persons_repo.upsert({
+                            "identification": identification,
+                            "name": entry.get("name", ""),
+                            "age": entry.get("age", ""),
+                            "position": entry.get("position", ""),
+                            "last_result_label": entry.get("result_label", ""),
+                            "last_test_type": key,
+                        })
+                except Exception:
+                    pass
+
         self.calibration_files = list(state.get("calibration_files") or [])
         self.test_attachment_files = state.get("test_attachment_files") or {"audiometria": [], "espirometria": []}
         self.attendance_files = list(state.get("attendance_files") or [])
@@ -5563,7 +5900,6 @@ class MainApplication:
             self.open_folder(str(target_root))
 
         self.status_label.configure(text=f"✅ ZIP exportado: {zip_path}")
-        self._reset_form_state()
     
     def open_folder(self, folder_path: str):
         """Abre la carpeta en el explorador del sistema"""

@@ -2,7 +2,7 @@
 
 RESULT_SCHEMES = {
     "audiometria": {
-        "title": "RESULTADOS DE LAS PRUEBAS",
+        "title": "Cuadro de Resultados de Audiometría",
         "chart_label": "AUDIOMETRÍAS",
         "analysis_label": "las audiometrías",
         "options": [
@@ -217,7 +217,7 @@ RESULT_SCHEMES = {
         ],
     },
     "espirometria": {
-        "title": "RESULTADOS DE LAS PRUEBAS",
+        "title": "Cuadro de Resultados de Espirometría",
         "chart_label": "ESPIROMETRÍAS",
         "analysis_label": "las espirometrías",
         "options": [

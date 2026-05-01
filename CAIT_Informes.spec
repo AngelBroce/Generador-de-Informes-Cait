@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['main.py'],
+    ['src\\ui\\app.py'],
     pathex=[],
     binaries=[],
-    datas=[('src\\assets', 'src\\assets'), ('data\\databases', 'data\\databases'), ('data\\attachments', 'data\\attachments'), ('imagenes de protocolo', 'imagenes de protocolo'), ('logo-apli-removebg-preview.ico', '.')],
+    datas=[('src/assets', 'src/assets'), ('logo-apli-removebg-preview.ico', '.'), ('data', 'data')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -32,7 +32,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['C:\\Users\\fioni\\Documents\\practica profecional\\logo-apli-removebg-preview.ico'],
+    icon=['logo-apli-removebg-preview.ico'],
 )
 coll = COLLECT(
     exe,
