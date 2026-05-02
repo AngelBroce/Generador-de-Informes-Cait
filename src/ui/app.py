@@ -5,7 +5,33 @@ from tkinter import ttk, filedialog, messagebox
 import customtkinter as ctk
 from pathlib import Path
 from PIL import Image, ImageTk
-from tkcalendar import DateEntry
+try:
+    from tkcalendar import DateEntry
+except ImportError:
+    # Fallback si tkcalendar no está disponible en el entorno compilado
+    from tkinter import ttk as _ttk
+    class DateEntry(_ttk.Entry):
+        """Reemplazo mínimo de DateEntry cuando tkcalendar no está disponible."""
+        def __init__(self, master=None, **kwargs):
+            kwargs.pop("date_pattern", None)
+            kwargs.pop("background", None)
+            kwargs.pop("foreground", None)
+            kwargs.pop("borderwidth", None)
+            kwargs.pop("selectbackground", None)
+            kwargs.pop("headersbackground", None)
+            kwargs.pop("headersforeground", None)
+            kwargs.pop("locale", None)
+            super().__init__(master, **kwargs)
+            self.insert(0, datetime.now().strftime("%Y-%m-%d"))
+        def get_date(self):
+            from datetime import datetime as _dt
+            try:
+                return _dt.strptime(self.get(), "%Y-%m-%d").date()
+            except Exception:
+                return _dt.now().date()
+        def set_date(self, date):
+            self.delete(0, "end")
+            self.insert(0, str(date))
 import os
 import re
 import sys
@@ -1255,7 +1281,7 @@ class MainApplication:
         type_combo = self._create_combo(
             form,
             self.report_type_var,
-            ["audiometría", "espirometría", "audiometría + espirometría"],
+            ["audiometría", "espirometría", "audiometría y espirometría"],
             command=lambda _value=None: self._handle_report_type_change(),
             width=280,
         )
@@ -5192,9 +5218,9 @@ class MainApplication:
         return match.group(0) if match else ""
 
     def _sanitize_filename(self, value: str) -> str:
-        """Remueve caracteres inválidos para nombres de archivos."""
+        """Remueve caracteres inválidos para nombres de archivos y carpetas."""
 
-        sanitized = re.sub(r'[<>:"/\\|?*]', "_", value)
+        sanitized = re.sub(r'[<>:"/\\|?*+]', "_", value)
         sanitized = re.sub(r"\s+", " ", sanitized).strip()
         return sanitized or "Informe"
 

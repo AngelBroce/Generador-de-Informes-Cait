@@ -2395,24 +2395,20 @@ class PDFGenerator:
                 os.remove(trailing_path)
 
     def _is_blank_pdf_page(self, page) -> bool:
-        """Determina si una página PDF está vacía (solo espacios en blanco)."""
+        """Determina si una página PDF está completamente vacía (sin stream de contenido).
+
+        Sólo se omite una página si no tiene ningún content stream asociado.
+        PDFs escaneados (imagen pura) tienen extract_text() vacío pero sí tienen
+        stream de datos, por lo que NO deben considerarse en blanco.
+        """
 
         try:
-            text = page.extract_text() or ""
-            if text.strip():
-                return False
-
             contents = page.get_contents()
+            # Sin stream de contenido en absoluto → página realmente vacía
             if not contents:
                 return True
-
-            if isinstance(contents, list):
-                data = b"".join(item.get_data() for item in contents if item)
-            else:
-                data = contents.get_data()
-
-            stripped = data.translate(None, b" \t\r\n")
-            return len(stripped) == 0
+            # Cualquier stream presente (texto, imagen, vectores…) → conservar
+            return False
         except Exception:
             return False
 
