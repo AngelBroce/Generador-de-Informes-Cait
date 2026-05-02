@@ -273,6 +273,7 @@ class PDFGenerator:
         """Coloca el logo de fondo con opacidad muy baja."""
 
         try:
+            import tempfile
             img = Image.open(logo_path)
 
             max_width = self.page_width * 0.60
@@ -282,10 +283,12 @@ class PDFGenerator:
 
             img = img.convert("RGBA")
             alpha = img.split()[3]
-            alpha = alpha.point(lambda p: int(p * 0.06))
+            alpha = alpha.point(lambda p: int(p * 0.08))
             img.putalpha(alpha)
 
-            temp_img_path = "temp_watermark.png"
+            # Usar archivo temporal seguro (funciona en el .exe compilado)
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                temp_img_path = tmp.name
             img.save(temp_img_path, format="PNG")
 
             x = (self.page_width - max_width) / 2
@@ -666,7 +669,9 @@ class PDFGenerator:
                 pdf_canvas.drawString(label_x, label_line_y, line)
                 label_line_y -= line_height
 
-            value_lines = self._wrap_text(str(value or "N/A"), "Helvetica", 11, value_width, pdf_canvas)
+            # Valores en MAYUSCULAS para consistencia visual
+            value_str = str(value or "N/A").upper()
+            value_lines = self._wrap_text(value_str, "Helvetica", 11, value_width, pdf_canvas)
             pdf_canvas.setFont("Helvetica", 11)
             pdf_canvas.setFillColor(colors.black)
             value_line_y = y
@@ -848,10 +853,27 @@ class PDFGenerator:
 
         pdf_canvas.setFont("Helvetica-Bold", 15)
         pdf_canvas.setFillColor(colors.HexColor("#2E7D32"))
+
+        # Título principal diferenciado por tipo de prueba
+        _type_title = {
+            "audiometria": "CUADRO DE RESULTADOS DE AUDIOMETRÍA",
+            "espirometria": "CUADRO DE RESULTADOS DE ESPIROMETRÍA",
+        }
+        display_title = _type_title.get(
+            scheme.get("key", ""),
+            scheme.get("title", self._resolve_results_title(report_data.get("type", ""))).upper()
+        )
+        # Inferir clave desde chart_label si no está en scheme
+        chart_label = (scheme.get("chart_label") or "").upper()
+        if "AUDIO" in chart_label:
+            display_title = "CUADRO DE RESULTADOS DE AUDIOMETRÍA"
+        elif "ESPIRO" in chart_label:
+            display_title = "CUADRO DE RESULTADOS DE ESPIROMETRÍA"
+
         pdf_canvas.drawCentredString(
             self.page_width / 2,
             y,
-            scheme.get("title", self._resolve_results_title(report_data.get("type", ""))),
+            display_title,
         )
 
         y -= 0.25 * inch
@@ -940,6 +962,9 @@ class PDFGenerator:
     ) -> float:
         """Dibuja una fila de la tabla con resaltado en la columna de resultado."""
 
+        # Campos que se muestran en MAYUSCULAS en el PDF
+        _uppercase_keys = {"name", "position", "identification", "age"}
+
         table_width = sum(column_widths)
         row_bottom = current_y - row_height
         fill_color = colors.HexColor("#F8FBF7") if row_index % 2 == 0 else colors.white
@@ -953,6 +978,9 @@ class PDFGenerator:
         for idx, column in enumerate(columns):
             width = column_widths[idx]
             value = self._resolve_entry_value(entry, column["key"], row_index)
+            # Aplicar mayúsculas a campos de datos
+            if column["key"] in _uppercase_keys and isinstance(value, str):
+                value = value.upper()
             lines = self._wrap_text(str(value or "N/A"), "Helvetica", 10, width - 8, pdf_canvas)
 
             if column["key"] == "result":
@@ -1044,10 +1072,10 @@ class PDFGenerator:
         pdf_canvas.line(self.left_margin, y, self.page_width - self.right_margin, y)
 
         table_top = y - 0.35 * inch
-        table_width = (self.page_width - self.left_margin - self.right_margin) * 0.38
-        column_widths = [table_width * 0.7, table_width * 0.3]
+        # 45% del ancho: suficiente para etiquetas + deja espacio a la gráfica
+        table_width = (self.page_width - self.left_margin - self.right_margin) * 0.45
+        column_widths = [table_width * 0.78, table_width * 0.22]
         header_height = 0.4 * inch
-        row_height = 0.32 * inch
 
         # Encabezado de la tabla
         pdf_canvas.setFillColor(colors.HexColor("#DAEBC8"))
@@ -1070,40 +1098,71 @@ class PDFGenerator:
             "CANTIDAD",
         )
 
-        rows = [
-            (option.get("table_label", option["label"]).upper(), stats.get(option["key"], 0))
-            for option in scheme.get("options", [])
-        ]
+        # ── Agrupar en Normal / Unilateral / Bilateral usando chart_group ──
+        if dataset_key == "audiometria":
+            group_defs = [
+                ("normal",     "NORMAL"),
+                ("unilateral", "UNILATERAL"),
+                ("bilateral",  "BILATERAL"),
+            ]
+            group_counts = {g: 0 for g, _ in group_defs}
+            for opt in scheme.get("options", []):
+                grp = opt.get("chart_group")
+                if grp in group_counts:
+                    group_counts[grp] += stats.get(opt["key"], 0)
+            rows = [(label, group_counts[grp]) for grp, label in group_defs]
+        else:
+            # Para espirometría: usar opciones individuales (pocas)
+            rows = [
+                (option.get("table_label", option["label"]).upper(), stats.get(option["key"], 0))
+                for option in scheme.get("options", [])
+                if stats.get(option["key"], 0) > 0
+            ]
         rows.append(("TOTAL", stats.get("total", 0)))
 
-        current_y = table_top - header_height
+        font_size = 10
+        line_h = 0.170 * inch
+        min_row_h = 0.32 * inch
+
+        row_data = []
         for label, value in rows:
-            current_y -= row_height
+            font_name = "Helvetica-Bold" if label == "TOTAL" else "Helvetica"
+            wrapped = self._wrap_text(label, font_name, font_size, column_widths[0] - 10, pdf_canvas)
+            needed_h = max(min_row_h, len(wrapped) * line_h + 0.08 * inch)
+            row_data.append((label, value, wrapped, font_name, needed_h))
+
+        current_y = table_top - header_height
+        for label, value, wrapped_lines, font_name, r_height in row_data:
             is_total = label == "TOTAL"
             fill_color = colors.HexColor("#F7FDF1") if not is_total else colors.HexColor("#FFF9E7")
             pdf_canvas.setFillColor(fill_color)
-            pdf_canvas.rect(self.left_margin, current_y, table_width, row_height, stroke=1, fill=1)
+            pdf_canvas.rect(self.left_margin, current_y - r_height, table_width, r_height, stroke=1, fill=1)
 
-            font_style = ("Helvetica-Bold", 10) if is_total else ("Helvetica", 10)
-            pdf_canvas.setFont(*font_style)
             pdf_canvas.setFillColor(colors.black)
-            pdf_canvas.drawString(self.left_margin + 6, current_y + row_height / 2 - 4, label)
+            text_y = current_y - 0.12 * inch
+            for line in wrapped_lines:
+                pdf_canvas.setFont(font_name, font_size)
+                pdf_canvas.drawString(self.left_margin + 6, text_y, line)
+                text_y -= line_h
+
+            pdf_canvas.setFont("Helvetica-Bold" if is_total else "Helvetica", font_size)
             pdf_canvas.drawCentredString(
                 self.left_margin + column_widths[0] + column_widths[1] / 2,
-                current_y + row_height / 2 - 4,
+                current_y - r_height / 2 - 3,
                 str(value),
             )
+            current_y -= r_height
 
         chart_bottom = current_y
         chart_path = self._create_results_chart_image(dataset_key, stats, scheme)
         if chart_path:
             try:
-                chart_gap = 0.5 * inch
+                chart_gap = 0.4 * inch
                 chart_x = self.left_margin + table_width + chart_gap
                 available_width = self.page_width - self.right_margin - chart_x
                 if available_width > 1.0 * inch:
-                    chart_width = min(available_width, 5.2 * inch)
-                    chart_height = chart_width * 0.72
+                    chart_width = min(available_width, 4.5 * inch)
+                    chart_height = chart_width * 0.80
                     chart_top = table_top - 0.1 * inch
                     chart_bottom = chart_top - chart_height
                     pdf_canvas.drawImage(
@@ -1955,14 +2014,21 @@ class PDFGenerator:
     ) -> int:
         """Dibuja una sección de texto libre (con o sin viñetas) manteniendo estilos."""
 
-        filtered_entries = [entry.strip() for entry in entries if entry and entry.strip()]
-        if not filtered_entries:
+        # Para conclusiones: preservar párrafos vacíos como separadores de espacio.
+        # Para viñetas: filtrar vacíos (no tiene sentido viñeta vacía).
+        if use_bullets:
+            all_entries = [e.strip() for e in entries if e and e.strip()]
+        else:
+            all_entries = [e.strip() for e in entries]  # preserva vacíos como "" (salto)
+
+        if not all_entries or all(not e for e in all_entries):
             return page_number - 1
 
         current_page = page_number
         text_width = self.page_width - self.left_margin - self.right_margin
         bullet_indent = 0.28 * inch
         line_spacing = 0.23 * inch
+        blank_line_gap = 0.18 * inch  # espacio para líneas vacías del usuario
 
         y = self._prepare_text_section_header(
             pdf_canvas,
@@ -1971,7 +2037,12 @@ class PDFGenerator:
             watermark_logo,
         )
 
-        for entry in filtered_entries:
+        for entry in all_entries:
+            # Línea vacía = salto de párrafo visual
+            if not entry:
+                y -= blank_line_gap
+                continue
+
             available_width = text_width - (bullet_indent if use_bullets else 0)
             lines = self._wrap_text(entry, "Helvetica", 11, available_width, pdf_canvas)
             required_height = len(lines) * line_spacing + 0.2 * inch
@@ -2005,6 +2076,7 @@ class PDFGenerator:
 
         self._draw_footer(pdf_canvas, page_number=current_page)
         return current_page
+
 
     def _prepare_text_section_header(
         self,
@@ -2050,23 +2122,23 @@ class PDFGenerator:
         return has_espiro and not has_audio
 
     def _split_into_paragraphs(self, text: str) -> list:
-        """Divide un texto en párrafos preservando saltos en blanco."""
+        """Divide un texto en párrafos preservando los saltos de línea del usuario."""
 
         if not text:
             return []
 
         paragraphs = []
-        buffer = []
         for raw_line in text.replace("\r", "").splitlines():
-            stripped = raw_line.strip()
-            if stripped:
-                buffer.append(stripped)
-            elif buffer:
-                paragraphs.append(" ".join(buffer))
-                buffer = []
+            # Cada línea que tenga contenido es un párrafo propio;
+            # las líneas vacías se incluyen como separadores (párrafo vacío)
+            # para que el PDF respete el espaciado tal como lo escribió el usuario.
+            paragraphs.append(raw_line.strip())
 
-        if buffer:
-            paragraphs.append(" ".join(buffer))
+        # Quitar vacíos al inicio y al final
+        while paragraphs and not paragraphs[0]:
+            paragraphs.pop(0)
+        while paragraphs and not paragraphs[-1]:
+            paragraphs.pop()
 
         return paragraphs
 
@@ -2207,26 +2279,42 @@ class PDFGenerator:
         """Obtiene rutas válidas de certificados para anexarlos al PDF final."""
 
         files = []
-        candidates = []
+        seen = set()
+
+        # Prioridad 1: lista directa de archivos PDF seleccionados en la UI
         raw_files = report_data.get("calibration_files")
         if raw_files:
-            candidates.extend(raw_files if isinstance(raw_files, list) else [raw_files])
+            candidates = raw_files if isinstance(raw_files, list) else [raw_files]
+            for entry in candidates:
+                file_path = None
+                if isinstance(entry, str):
+                    file_path = entry
+                elif isinstance(entry, dict):
+                    file_path = entry.get("file") or entry.get("file_path") or entry.get("attachment")
+                if not file_path:
+                    continue
+                normalized = file_path.strip()
+                if normalized and os.path.exists(normalized) and normalized not in seen:
+                    seen.add(normalized)
+                    files.append(normalized)
 
+        # Prioridad 2: entradas del formulario de certificados (con ruta adjunta)
         raw_entries = report_data.get("calibration_certificates")
         if raw_entries:
-            candidates.extend(raw_entries if isinstance(raw_entries, list) else [raw_entries])
+            candidates = raw_entries if isinstance(raw_entries, list) else [raw_entries]
+            for entry in candidates:
+                file_path = None
+                if isinstance(entry, str):
+                    file_path = entry
+                elif isinstance(entry, dict):
+                    file_path = entry.get("file") or entry.get("file_path") or entry.get("attachment")
+                if not file_path:
+                    continue
+                normalized = file_path.strip()
+                if normalized and os.path.exists(normalized) and normalized not in seen:
+                    seen.add(normalized)
+                    files.append(normalized)
 
-        for entry in candidates:
-            file_path = None
-            if isinstance(entry, str):
-                file_path = entry
-            elif isinstance(entry, dict):
-                file_path = entry.get("file") or entry.get("file_path") or entry.get("attachment")
-            if not file_path:
-                continue
-            normalized = file_path.strip()
-            if normalized and os.path.exists(normalized) and normalized not in files:
-                files.append(normalized)
         return files
 
     def _resolve_file_list(self, raw_value) -> list:
@@ -2451,171 +2539,133 @@ class PDFGenerator:
         stats: Dict[str, int],
         scheme: Dict,
     ) -> Optional[str]:
-        """Genera una gráfica de pastel con Seaborn para el conjunto indicado."""
-
+        """Genera una gráfica de pastel con colores bien diferenciados por grupo."""
 
         try:
+            import matplotlib
+            matplotlib.use("Agg")
             import matplotlib.pyplot as plt
-            import seaborn as sns
             from matplotlib import patheffects
         except Exception as exc:  # pragma: no cover
-            print(f"No se pudo cargar seaborn/matplotlib: {exc}")
-
+            print(f"No se pudo cargar matplotlib: {exc}")
             return None
 
-        segments = []
+        def hex_to_rgb(h: str) -> tuple:
+            h = h.lstrip("#")
+            return tuple(int(h[i:i+2], 16) / 255.0 for i in (0, 2, 4))
+
+        # ── Segmentos y colores según tipo de prueba ──
         if dataset_key == "audiometria":
-            groups = {
-                "normal": {"label": "Normal bilateral", "count": 0},
-                "unilateral": {"label": "Caída unilateral", "count": 0},
-                "bilateral": {"label": "Caída bilateral", "count": 0},
-            }
-            for option in scheme.get("options", []):
-                key = option.get("key")
-                grp = option.get("chart_group")
-                if grp in groups:
-                    groups[grp]["count"] += stats.get(key, 0)
-            for grp, data in groups.items():
-                segments.append((data["label"], data["count"], grp, {}))
+            # Agrupar siempre en 3 categorías con colores fijos y bien contrastados
+            group_config = [
+                ("normal",     "NORMAL",     "#2E7D32"),  # verde oscuro
+                ("unilateral", "UNILATERAL", "#F57C00"),  # naranja fuerte
+                ("bilateral",  "BILATERAL",  "#C62828"),  # rojo oscuro
+            ]
+            data_labels, data_values, palette = [], [], []
+            for grp, label, color in group_config:
+                count = sum(
+                    stats.get(opt["key"], 0)
+                    for opt in scheme.get("options", [])
+                    if opt.get("chart_group") == grp
+                )
+                if count > 0:
+                    data_labels.append(label)
+                    data_values.append(count)
+                    palette.append(hex_to_rgb(color))
         else:
-            for option in scheme.get("options", []):
-                key = option.get("key")
-                label = option.get("chart_label") or option.get("label") or key
-                segments.append((label, stats.get(key, 0), key, option))
+            # Espirometría: colores individuales vivos
+            espiro_colors = [
+                "#1565C0",  # azul
+                "#F57C00",  # naranja
+                "#C62828",  # rojo
+                "#6A1B9A",  # violeta
+                "#00695C",  # teal
+                "#AD1457",  # rosa
+                "#558B2F",  # verde oliva
+            ]
+            data_labels, data_values, palette = [], [], []
+            for idx, opt in enumerate(scheme.get("options", [])):
+                count = stats.get(opt["key"], 0)
+                if count > 0:
+                    data_labels.append((opt.get("chart_label") or opt.get("label") or opt["key"]).upper())
+                    data_values.append(count)
+                    palette.append(hex_to_rgb(espiro_colors[idx % len(espiro_colors)]))
 
-        total_count = sum(val for _label, val, _code, _opt in segments)
-
+        total_count = sum(data_values)
         if total_count == 0:
             return None
-
-
-        sns.set_theme(style="white")
-        fig, ax = plt.subplots(figsize=(4.6, 3.6), dpi=200)
-
-        fig.patch.set_alpha(0)
-
-        def hex_to_rgb_fraction(hex_color: str) -> tuple:
-
-            hex_color = hex_color.lstrip("#")
-            return tuple(int(hex_color[i : i + 2], 16) / 255.0 for i in (0, 2, 4))
-
-
-        vivid_palette_hex = [
-            "#0072CE",  # azul vivo
-            "#FF6F00",  # naranja vivo
-            "#00A86B",  # verde esmeralda
-            "#D81B60",  # magenta
-            "#6A1B9A",  # violeta
-            "#E53935",  # rojo vivo
-            "#00897B",  # turquesa
-            "#F9A825",  # amarillo ámbar
-        ]
-        fallback_color = hex_to_rgb_fraction(vivid_palette_hex[0])
-
-        data_values = []
-        data_labels = []
-        palette = []
-        color_idx = 0
-        for label, value, _key, option in segments:
-            if value > 0:
-                data_values.append(value)
-                data_labels.append(str(label).upper())
-            palette_hex = vivid_palette_hex[color_idx % len(vivid_palette_hex)]
-            palette.append(hex_to_rgb_fraction(palette_hex))
-            color_idx += 1
-
 
         if not data_values:
             data_values = [1]
             data_labels = ["SIN DATOS"]
-            palette = [fallback_color]
+            palette = [hex_to_rgb("#9E9E9E")]
 
         def label_fmt(pct: float) -> str:
             absolute = int(round(pct * total_count / 100.0))
             return f"{pct:.0f}%\n({absolute})"
 
-        def adjust_color(color: tuple, factor: float) -> tuple:
+        fig, ax = plt.subplots(figsize=(5.0, 3.8), dpi=180)
+        fig.patch.set_alpha(0)
+        ax.set_facecolor("none")
 
-            return tuple(min(1, max(0, c * factor)) for c in color)
-
-        base_colors = [adjust_color(col, 0.8) for col in palette]
-
-        ax.pie(
-
-            data_values,
-            colors=base_colors,
-            startangle=90,
-            radius=1.02,
-            wedgeprops={"linewidth": 0, "edgecolor": "none"},
-            center=(0, -0.08),
-        )
-
-        explode = [0.06] * len(data_values)
+        explode = [0.05] * len(data_values)
         wedges, texts, autotexts = ax.pie(
             data_values,
             colors=palette,
             startangle=90,
-
             explode=explode,
-            shadow=False,
             autopct=label_fmt,
-            pctdistance=0.74,
-
-            textprops={"fontsize": 8, "color": "#212121"},
-            wedgeprops={"linewidth": 1.4, "edgecolor": "#FFFFFF"},
+            pctdistance=0.70,
+            textprops={"fontsize": 9, "color": "#FFFFFF", "fontweight": "bold"},
+            wedgeprops={"linewidth": 2, "edgecolor": "#FFFFFF"},
         )
 
-        for wedge in wedges:
-            wedge.set_linewidth(1.4)
-            wedge.set_edgecolor("#FFFFFF")
         for autotext in autotexts:
+            autotext.set_fontsize(8)
             autotext.set_fontweight("bold")
+            autotext.set_color("#FFFFFF")
+            autotext.set_path_effects([
+                patheffects.withStroke(linewidth=1.5, foreground="#00000088")
+            ])
 
-        total_text = ax.text(
-            0,
-            -0.02,
-            f"TOTAL\n{total_count}",
-            ha="center",
-
-            va="center",
-            fontsize=10,
-            fontweight="bold",
-
-            color="#FFFFFF",
-        )
-        total_text.set_path_effects([
-            patheffects.withStroke(linewidth=2.2, foreground="#1B5E20")
-        ])
-
-        legend_labels = []
-        for label, val in zip(data_labels, data_values):
-            percent = (val / total_count) * 100 if total_count else 0
-            legend_labels.append(f"{label}: {val} ({percent:.0f}%)")
-
-        ax.legend(
+        # Leyenda clara al lado derecho
+        legend_labels = [
+            f"{lbl}:  {val}  ({val/total_count*100:.0f}%)"
+            for lbl, val in zip(data_labels, data_values)
+        ]
+        legend = ax.legend(
             wedges,
             legend_labels,
             loc="center left",
-            bbox_to_anchor=(1.1, 0.5),
-            frameon=False,
-            fontsize=8,
-            labelcolor=["#2b2b2b"] * len(legend_labels),
+            bbox_to_anchor=(1.02, 0.5),
+            frameon=True,
+            fontsize=8.5,
+            facecolor="#F9FBF7",
+            edgecolor="#CCCCCC",
         )
-        chart_label = scheme.get("chart_label", self._get_results_label(dataset_key))
+        for text in legend.get_texts():
+            text.set_color("#1A1A1A")
+
+        chart_label = scheme.get("chart_label", dataset_key.upper())
         ax.set_title(
-            f"Distribución porcentual - {chart_label}",
+            f"DISTRIBUCIÓN — {chart_label}",
             fontsize=10,
-            pad=12,
+            fontweight="bold",
+            color="#1B5E20",
+            pad=14,
         )
         ax.axis("equal")
 
+        import tempfile
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-        temp_file_path = temp_file.name
+        temp_path = temp_file.name
         temp_file.close()
 
-        fig.savefig(temp_file_path, format="png", bbox_inches="tight", transparent=True)
+        fig.savefig(temp_path, format="png", bbox_inches="tight",
+                    transparent=True, dpi=180)
         plt.close(fig)
-        return temp_file_path
+        return temp_path
 
     def _resolve_result_code(self, entry: Dict, dataset_key: str = "audiometria") -> str:
         """Normaliza un registro para ubicarlo dentro del esquema solicitado."""
@@ -2776,7 +2826,7 @@ class PDFGenerator:
         return report_data.get("link_mode") == "relative"
 
     def _draw_footer(self, pdf_canvas: canvas.Canvas, page_number: int = 1) -> None:
-        """Pie de página con información de generación y numeración."""
+        """Pie de página con numeración de página."""
 
         y = self.bottom_margin / 2
         motto_y = y + 0.22 * inch
@@ -2786,7 +2836,6 @@ class PDFGenerator:
 
         pdf_canvas.setFont("Helvetica", 8)
         pdf_canvas.setFillColor(colors.black)
-        pdf_canvas.drawString(self.left_margin, y, f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
         pdf_canvas.drawString(
             self.page_width - self.right_margin - 0.5 * inch,
             y,

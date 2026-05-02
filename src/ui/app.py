@@ -5140,9 +5140,20 @@ class MainApplication:
         from src.services.pdf_generator import PDFGenerator
 
         pdf_gen = PDFGenerator()
+
+        # Buscar el logo en múltiples ubicaciones posibles
         logo_path = None
-        if self.app_logo_path and self.app_logo_path.exists():
-            logo_path = str(self.app_logo_path)
+        logo_candidates = [
+            self.app_logo_path,                   # src/assets/logo_cait.png
+            self.header_logo_path,                 # .ico o logo principal
+            self.project_root / "logo-apli-removebg-preview.ico",
+            Path(__file__).parent.parent / "assets" / "logo_cait.png",
+        ]
+        for candidate in logo_candidates:
+            if candidate and Path(candidate).exists():
+                logo_path = str(candidate)
+                break
+
         return pdf_gen.generate(self.current_report, str(pdf_path), logo_path)
 
     def _build_export_base_name(self) -> str:
