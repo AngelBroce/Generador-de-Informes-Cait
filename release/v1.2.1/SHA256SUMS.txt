@@ -1,0 +1,2 @@
+3e402830aea8be32eacee5f6c91383404f792aca21b761a2ef37142ca89b8955  CAIT_Informes_Setup_v1.2.1.exe
+8960e86a2de1421149874851867fb170dafd790a16e0b93085c3e9cb8bb41825  CAIT_Informes_Portable_v1.2.1.zip

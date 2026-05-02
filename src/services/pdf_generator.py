@@ -353,7 +353,12 @@ class PDFGenerator:
 
         y -= 0.35 * inch
         pdf_canvas.setFont("Helvetica-Bold", 13)
-        report_type_text = f"EVALUACIÓN DE {report_data.get('type', 'evaluación').upper()}S"
+        raw_type = (report_data.get("type") or "evaluación").strip()
+        normalized_type = raw_type.lower()
+        if "audiometr" in normalized_type and "espirom" in normalized_type:
+            report_type_text = "AUDIOMETRÍA Y ESPIROMETRÍA"
+        else:
+            report_type_text = f"EVALUACIÓN DE {raw_type.upper()}S"
         pdf_canvas.drawCentredString(self.page_width / 2, y, report_type_text)
 
         y -= 0.45 * inch
@@ -2364,8 +2369,8 @@ class PDFGenerator:
                     try:
                         attachment_reader = PdfReader(file_path)
                         for attachment_page in attachment_reader.pages:
-                            if self._is_blank_pdf_page(attachment_page):
-                                continue
+                            # No se filtra por página en blanco: los PDFs escaneados
+                            # tienen extract_text() vacío pero contienen imágenes válidas.
                             writer.add_page(attachment_page)
                     except Exception as exc:  # pragma: no cover
                         print(f"Advertencia al adjuntar {file_path}: {exc}")
