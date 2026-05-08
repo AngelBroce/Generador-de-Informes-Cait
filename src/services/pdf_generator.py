@@ -2349,6 +2349,7 @@ class PDFGenerator:
 
         reader = PdfReader(base_pdf_path)
         writer = PdfWriter()
+        active_readers = [reader]  # Mantiene las referencias vivas hasta que se escriba el PDF
 
         ordered_sections = list(attachment_sections)
         section_index = 0
@@ -2368,6 +2369,7 @@ class PDFGenerator:
                         continue
                     try:
                         attachment_reader = PdfReader(file_path)
+                        active_readers.append(attachment_reader)
                         for attachment_page in attachment_reader.pages:
                             # No se filtra por página en blanco: los PDFs escaneados
                             # tienen extract_text() vacío pero contienen imágenes válidas.
@@ -2382,6 +2384,7 @@ class PDFGenerator:
                 continue
             try:
                 trailing_reader = PdfReader(trailing_path)
+                active_readers.append(trailing_reader)
                 for trailing_page in trailing_reader.pages:
                     if self._is_blank_pdf_page(trailing_page):
                         continue
