@@ -2220,7 +2220,7 @@ class MainApplication:
             lambda _evt, var=text_var: self._normalize_date_var(var),
         )
         entry_widget = getattr(date_entry, "entry", date_entry)
-        entry_widget.configure(state="readonly")
+        entry_widget.configure(state="normal")
         return date_entry
 
     def _normalize_date_var(self, text_var: tk.StringVar) -> None:
