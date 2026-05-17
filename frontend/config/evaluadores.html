@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html class="light" lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Gestionar Evaluadores – CAIT Informes</title>
+<script src="/static/js/tailwind.js?plugins=forms,container-queries"></script>
+<!-- Offline Fonts Enabled -->
+<!-- Offline Fonts Enabled -->
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode:"class",
+    theme:{extend:{
+      colors:{
+        "background":"#fcf9f8","surface":"#fcf9f8",
+        "surface-container-lowest":"#ffffff","surface-container-low":"#f6f3f2",
+        "surface-container":"#f0eded","surface-container-high":"#eae7e7",
+        "on-surface":"#1b1c1c","on-surface-variant":"#41493e",
+        "outline":"#717a6d","outline-variant":"#c0c9bb",
+        "primary":"#00450d","on-primary":"#ffffff","primary-container":"#1b5e20","on-primary-container":"#90d689",
+        "secondary":"#1b6d24","on-secondary":"#ffffff","secondary-container":"#a0f399",
+        "error":"#ba1a1a","on-error":"#ffffff"
+      },
+      borderRadius:{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},
+      fontFamily:{"sans":["Inter","sans-serif"]}
+    }}
+  }
+</script>
+<style>
+  *{font-family:'Inter',sans-serif;box-sizing:border-box;}
+  .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block;line-height:1;vertical-align:middle;}
+  .toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;transition:opacity .3s;opacity:0;}
+  .toast.show{opacity:1;}
+  .toast.success{background:#1b5e20;color:#fff;}
+  .toast.error{background:#ba1a1a;color:#fff;}
+</style>
+<link rel="stylesheet" href="/static/js/offline-fonts.css">
+</head>
+<body class="bg-background text-on-surface" style="display:flex;flex-direction:column;height:100vh;overflow:hidden;">
+
+<header style="height:64px;flex-shrink:0;" class="flex items-center justify-between px-lg bg-surface border-b border-outline-variant w-full">
+  <div class="flex items-center gap-3 text-primary font-bold text-lg cursor-pointer" onclick="location.href='/'">
+    <img src="/static/logo.png" alt="Logo CAIT" class="h-10 w-auto"/>
+    Generador de Informes CAIT
+  </div>
+  <button onclick="history.back()" class="flex items-center gap-1 px-4 py-2 text-sm font-bold text-outline border border-outline-variant rounded-lg hover:bg-surface-container transition-colors">
+    <span class="material-symbols-outlined" style="font-size:18px;">arrow_back</span> Volver
+  </button>
+</header>
+
+<main style="flex:1;overflow-y:auto;" class="p-lg">
+  <div class="max-w-4xl mx-auto">
+    <div class="mb-8">
+      <h1 class="text-3xl font-bold text-on-surface">Gestión de Evaluadores</h1>
+      <p class="text-on-surface-variant">Administre el catálogo de médicos y especialistas.</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+      <!-- Formulario -->
+      <div class="md:col-span-5 bg-surface border border-outline-variant rounded-xl p-5 h-fit">
+        <h2 class="font-bold mb-4 flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary">person_add</span>
+          Nuevo Evaluador
+        </h2>
+        <div class="space-y-4">
+          <div>
+            <label class="text-xs font-bold text-outline uppercase block mb-1">Nombre Completo</label>
+            <input id="ev-name" type="text" class="w-full h-10 px-3 border border-outline-variant rounded-lg bg-surface-container-low outline-none focus:ring-2 focus:ring-primary"/>
+          </div>
+          <div>
+            <label class="text-xs font-bold text-outline uppercase block mb-1">Profesión / Especialidad</label>
+            <input id="ev-profession" type="text" placeholder="Ej: Fonoaudióloga" class="w-full h-10 px-3 border border-outline-variant rounded-lg bg-surface-container-low outline-none focus:ring-2 focus:ring-primary"/>
+          </div>
+          <div>
+            <label class="text-xs font-bold text-outline uppercase block mb-1">Registro / ID</label>
+            <input id="ev-registry" type="text" placeholder="Ej: Registro 180" class="w-full h-10 px-3 border border-outline-variant rounded-lg bg-surface-container-low outline-none focus:ring-2 focus:ring-primary"/>
+          </div>
+          <div>
+            <label class="text-xs font-bold text-outline uppercase block mb-1">Imagen de Idoneidad / Firma</label>
+            <div class="flex items-center gap-3">
+              <input id="ev-file" type="file" accept="image/*" class="hidden"/>
+              <button onclick="document.getElementById('ev-file').click()" class="px-4 py-2 text-xs font-bold text-primary border border-primary rounded hover:bg-primary hover:text-white transition-colors">
+                Seleccionar Imagen
+              </button>
+              <span id="ev-file-name" class="text-xs text-outline italic truncate max-w-[150px]">Sin archivo...</span>
+            </div>
+          </div>
+          <div>
+            <label class="text-xs font-bold text-outline uppercase block mb-1">Aplica para</label>
+            <div class="flex gap-4">
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" value="audiometria" class="ev-applies"/> Audiometría</label>
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" value="espirometria" class="ev-applies"/> Espirometría</label>
+            </div>
+          </div>
+          <button id="btn-add-ev" class="w-full py-2 bg-primary text-on-primary font-bold rounded-lg hover:opacity-90">Agregar al Catálogo</button>
+        </div>
+      </div>
+
+      <!-- Tabla -->
+      <div class="md:col-span-7 bg-surface border border-outline-variant rounded-xl overflow-hidden">
+        <table class="w-full text-left text-sm border-collapse">
+          <thead>
+            <tr class="bg-surface-container-low border-b border-outline-variant">
+              <th class="px-4 py-3 font-bold text-outline uppercase">Nombre</th>
+              <th class="px-4 py-3 font-bold text-outline uppercase">Profesión</th>
+              <th class="px-4 py-3 font-bold text-outline uppercase text-right">Acción</th>
+            </tr>
+          </thead>
+          <tbody id="ev-list" class="divide-y divide-outline-variant">
+            <!-- dinámico -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  function showToast(msg, type='success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.className = `toast ${type} show`;
+    setTimeout(() => t.classList.remove('show'), 2800);
+  }
+
+  async function loadEvaluators() {
+    const res = await fetch('/api/evaluators');
+    const data = await res.json();
+    const tbody = document.getElementById('ev-list');
+    tbody.innerHTML = '';
+    data.forEach(ev => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="px-4 py-3 font-bold">${ev.name}</td>
+        <td class="px-4 py-3 text-on-surface-variant">${ev.profession || '—'}</td>
+        <td class="px-4 py-3 text-right">
+          <button onclick="removeEv('${ev.id}')" class="text-error font-bold text-xs hover:underline">Eliminar</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  document.getElementById('ev-file').addEventListener('change', e => {
+    document.getElementById('ev-file-name').textContent = e.target.files[0] ? e.target.files[0].name : 'Sin archivo...';
+  });
+
+  async function addEvaluator() {
+    const name = document.getElementById('ev-name').value.trim();
+    const profession = document.getElementById('ev-profession').value.trim();
+    const registry = document.getElementById('ev-registry').value.trim();
+    const fileInput = document.getElementById('ev-file');
+    const applies = Array.from(document.querySelectorAll('.ev-applies:checked')).map(c => c.value);
+
+    if (!name) return showToast('El nombre es obligatorio','error');
+
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('profession', profession);
+    formData.append('registry', registry);
+    formData.append('applicable_reports', JSON.stringify(applies));
+    if (fileInput.files[0]) {
+      formData.append('file', fileInput.files[0]);
+    }
+
+    const res = await fetch('/api/evaluators', {
+      method: 'POST',
+      body: formData // Fetch maneja el Content-Type automáticamente con FormData
+    });
+
+    if (res.ok) {
+      showToast('Evaluador agregado ✓');
+      document.getElementById('ev-name').value = '';
+      document.getElementById('ev-profession').value = '';
+      document.getElementById('ev-registry').value = '';
+      document.getElementById('ev-file').value = '';
+      document.getElementById('ev-file-name').textContent = 'Sin archivo...';
+      loadEvaluators();
+    } else {
+      showToast('Error al guardar','error');
+    }
+  }
+
+  async function removeEv(id) {
+    if (!confirm('¿Seguro que desea eliminar este evaluador?')) return;
+    const res = await fetch(`/api/evaluators/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      showToast('Evaluador eliminado');
+      loadEvaluators();
+    }
+  }
+
+  document.getElementById('btn-add-ev').addEventListener('click', addEvaluator);
+  window.addEventListener('DOMContentLoaded', loadEvaluators);
+</script>
+</body>
+</html>

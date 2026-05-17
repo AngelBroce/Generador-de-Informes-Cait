@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html class="light" lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Resultados – CAIT Informes</title>
+<script src="/static/js/tailwind.js?plugins=forms,container-queries"></script>
+<!-- Offline Fonts Enabled -->
+<!-- Offline Fonts Enabled -->
+<script src="/static/js/ui-components.js"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode:"class",
+    theme:{extend:{
+      colors:{
+        "background":"#fcf9f8","surface":"#fcf9f8",
+        "surface-container-lowest":"#ffffff","surface-container-low":"#f6f3f2",
+        "surface-container":"#f0eded","surface-container-high":"#eae7e7",
+        "on-surface":"#1b1c1c","on-surface-variant":"#41493e",
+        "outline":"#717a6d","outline-variant":"#c0c9bb",
+        "primary":"#00450d","on-primary":"#ffffff","primary-container":"#1b5e20","on-primary-container":"#90d689",
+        "secondary":"#1b6d24","on-secondary":"#ffffff","secondary-container":"#a0f399",
+        "error":"#ba1a1a","on-error":"#ffffff","error-container":"#ffdad6"
+      },
+      spacing:{"xs":"4px","sm":"8px","md":"16px","lg":"24px","xl":"32px","margin":"24px","gutter":"16px"},
+      borderRadius:{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},
+      fontFamily:{"sans":["Inter","sans-serif"]},
+      fontSize:{
+        "headline-lg":["30px",{lineHeight:"38px",letterSpacing:"-0.02em",fontWeight:"700"}],
+        "headline-sm":["20px",{lineHeight:"28px",fontWeight:"600"}],
+        "body-md":["14px",{lineHeight:"20px",fontWeight:"400"}],
+        "body-sm":["12px",{lineHeight:"16px",fontWeight:"400"}],
+        "label-bold":["12px",{lineHeight:"16px",letterSpacing:"0.05em",fontWeight:"700"}]
+      }
+    }}
+  }
+</script>
+<style>
+  *{font-family:'Inter',sans-serif;box-sizing:border-box;}
+  .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block;line-height:1;vertical-align:middle;}
+  .nav-active{background-color:#eae7e7;color:#00450d;font-weight:700;}
+  .nav-item{color:#41493e;}
+  .toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;transition:opacity .3s;opacity:0;}
+  .toast.show{opacity:1;}
+  .toast.success{background:#1b5e20;color:#fff;}
+  .toast.error{background:#ba1a1a;color:#fff;}
+  input.invalid,select.invalid{border-color:#ba1a1a!important;box-shadow:0 0 0 2px #ffdad6;}
+  .field-error{display:none;font-size:11px;color:#ba1a1a;margin-top:2px;}
+  .field-error.show{display:block;}
+  .chip{display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;}
+  .chip-normal{background:#a0f399;color:#002204;}
+  .chip-alterado{background:#ffdad6;color:#93000a;}
+  .chip-vigilancia{background:#fff3e0;color:#e65100;}
+  .block-header-audio{background:linear-gradient(90deg,#00450d 0%,#1b6d24 100%);}
+  .block-header-espiro{background:linear-gradient(90deg,#1b5e20 0%,#2e7d32 100%);}
+</style>
+<link rel="stylesheet" href="/static/js/offline-fonts.css">
+</head>
+<body class="bg-background text-on-surface" style="display:flex;flex-direction:column;height:100vh;overflow:hidden;">
+
+<!-- ====== TOP APP BAR ====== -->
+<header id="header-container"></header>
+
+<!-- ====== BODY ROW ====== -->
+<div style="display:flex;flex:1;overflow:hidden;">
+
+  <!-- === SIDEBAR === -->
+  <aside id="sidebar-container" style="width:256px;" class="hidden md:flex flex-col bg-surface-container-low border-r border-outline-variant py-4 overflow-y-auto shrink-0"></aside>
+
+  <!-- === MAIN CONTENT === -->
+  <main style="flex:1;overflow-y:auto;" class="bg-background p-lg">
+    <div class="max-w-5xl mx-auto">
+
+      <div class="mb-6 border-l-4 border-primary pl-5 py-1">
+        <h1 class="text-headline-lg text-on-surface">Resultados de las Pruebas</h1>
+        <p id="subtitle" class="text-on-surface-variant text-body-md mt-1">Cargando tipo de informe...</p>
+      </div>
+
+      <!-- CONTENEDOR DINÁMICO: se llenan los bloques por JS -->
+      <div id="blocks-container" class="flex flex-col gap-8">
+        <p class="text-outline text-sm italic">Cargando datos del informe...</p>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<!-- ===== TEMPLATE DE BLOQUE (oculto, clonado por JS) ===== -->
+<template id="block-tpl">
+  <div class="bg-surface border border-outline-variant rounded-xl overflow-hidden shadow-sm">
+    <!-- cabecera de color -->
+    <div class="block-hdr p-4 flex items-center gap-3">
+      <span class="material-symbols-outlined text-white block-icon" style="font-size:26px;"></span>
+      <div>
+        <h2 class="text-white font-bold text-base block-title"></h2>
+        <p class="text-white/70 text-xs block-subtitle"></p>
+      </div>
+    </div>
+    <!-- formulario de entrada -->
+    <div class="p-5 border-b border-outline-variant bg-surface-container-low">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div>
+          <label class="text-xs font-bold text-primary uppercase block mb-1">Nombre Completo *</label>
+          <input data-field="name" type="text" placeholder="Nombre del trabajador"
+            class="w-full h-10 px-3 border border-outline-variant rounded-lg bg-white focus:border-primary focus:ring-2 focus:ring-primary outline-none"/>
+          <p class="field-error" data-err="name">Campo obligatorio.</p>
+        </div>
+        <div>
+          <label class="text-xs font-bold text-primary uppercase block mb-1">Cédula *</label>
+          <input data-field="cedula" type="text" placeholder="0-000-0000"
+            class="w-full h-10 px-3 border border-outline-variant rounded-lg bg-white focus:border-primary focus:ring-2 focus:ring-primary outline-none"/>
+          <p class="field-error" data-err="cedula">Formato inválido (ej: 8-123-4567).</p>
+        </div>
+        <div>
+          <label class="text-xs font-bold text-primary uppercase block mb-1">Edad</label>
+          <input data-field="age" type="number" min="1" max="99" placeholder="00"
+            class="w-full h-10 px-3 border border-outline-variant rounded-lg bg-white focus:border-primary focus:ring-2 focus:ring-primary outline-none"/>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label class="text-xs font-bold text-primary uppercase block mb-1">Área / Puesto *</label>
+          <input data-field="position" type="text" placeholder="Ej: Operaciones"
+            class="w-full h-10 px-3 border border-outline-variant rounded-lg bg-white focus:border-primary focus:ring-2 focus:ring-primary outline-none"/>
+          <p class="field-error" data-err="position">Campo obligatorio.</p>
+        </div>
+        <div>
+          <label class="text-xs font-bold text-primary uppercase block mb-1">Resultado *</label>
+          <select data-field="result"
+            class="w-full h-10 px-3 border border-outline-variant rounded-lg bg-white focus:border-primary focus:ring-2 focus:ring-primary outline-none cursor-pointer">
+          </select>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2">
+        <button data-action="clear-form"
+          class="px-4 py-2 text-sm font-bold text-outline border border-outline-variant rounded-lg hover:bg-surface-container transition-colors">
+          Limpiar
+        </button>
+        <button data-action="add"
+          class="flex items-center gap-1 px-5 py-2 text-sm font-bold text-on-primary bg-primary rounded-lg hover:opacity-90 transition-opacity">
+          <span class="material-symbols-outlined" style="font-size:18px;">add</span> Agregar
+        </button>
+      </div>
+    </div>
+    <!-- tabla -->
+    <div>
+      <div class="px-4 py-3 bg-surface-container-low border-b border-outline-variant flex items-center justify-between">
+        <span class="text-xs font-bold text-on-surface uppercase tracking-wider">Listado de Evaluados</span>
+        <button data-action="clear-table" class="text-error text-xs font-bold hover:underline">Limpiar lista</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr class="bg-surface-container-low border-b border-outline-variant">
+              <th class="px-4 py-3 font-bold text-outline uppercase w-10 text-center">N°</th>
+              <th class="px-4 py-3 font-bold text-outline uppercase">Nombre</th>
+              <th class="px-4 py-3 font-bold text-outline uppercase">Cédula</th>
+              <th class="px-4 py-3 font-bold text-outline uppercase">Edad</th>
+              <th class="px-4 py-3 font-bold text-outline uppercase">Área</th>
+              <th class="px-4 py-3 font-bold text-outline uppercase">Resultado</th>
+              <th class="px-4 py-3 font-bold text-outline uppercase text-right">Acción</th>
+            </tr>
+          </thead>
+          <tbody data-tbody class="divide-y divide-outline-variant">
+            <tr data-empty><td colspan="7" class="px-4 py-10 text-center text-outline text-sm">No hay resultados agregados aún.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+// ── Configuración por tipo de bloque (opciones exactas del Python original) ──
+const BLOCK_CONFIG = {
+  audiometria: {
+    icon: 'hearing',
+    title: 'AUDIOMETRÍA',
+    subtitle: 'Cuadro de Resultados de Audiometría',
+    headerClass: 'block-header-audio',
+    storageKey: 'resultados_audiometria',
+    resultados: [
+      'Normal bilateral',
+      'Anacusia unilateral',
+      'Anacusia bilateral',
+      'Caída leve a profunda bilateral',
+      'Caída leve a profunda unilateral',
+      'Caída leve a severa bilateral',
+      'Caída leve a severa unilateral',
+      'Caída leve unilateral',
+      'Caída leve bilateral',
+      'Caída moderada a severa unilateral',
+      'Caída moderada a severa bilateral',
+      'Caída leve a moderada severa bilateral',
+      'Caída leve a moderada severa unilateral',
+      'Caída moderada a moderada severa bilateral',
+      'Caída moderada a moderada severa unilateral',
+      'Caída leve a moderada a severa bilateral',
+      'Caída leve a moderada a severa unilateral',
+      'Caída leve a moderada bilateral',
+      'Caída leve a moderada unilateral',
+      'Caída de moderada a leve bilateral',
+      'Caída de moderada a leve unilateral',
+      'Caída profunda bilateral',
+      'Caída profunda unilateral',
+      'Caída severa bilateral',
+      'Caída severa unilateral'
+    ]
+  },
+  espirometria: {
+    icon: 'pulmonology',
+    title: 'ESPIROMETRÍA',
+    subtitle: 'Cuadro de Resultados de Espirometría',
+    headerClass: 'block-header-espiro',
+    storageKey: 'resultados_espirometria',
+    resultados: [
+      'Espirometría normal',
+      'Restricción leve',
+      'Obstrucción leve',
+      'Obstrucción a restricción leve',
+      'Restricción moderada',
+      'Obstrucción moderada',
+      'Restricción grave'
+    ]
+  }
+};
+
+// ── Estado global ─────────────────────────────────────────────────────────────
+let personsCatalog = []; // Catálogo de trabajadores para autocompletado
+
+const state = {
+  audiometria: [],
+  espirometria: [],
+  editingIndex: { audiometria: null, espirometria: null }
+};
+
+async function loadPersons() {
+  try {
+    const res = await fetch('/api/persons');
+    if (res.ok) personsCatalog = await res.json();
+  } catch (e) { console.error('Error cargando catálogo de personas:', e); }
+}
+
+function buscarPersona(tipo, cedula) {
+  const p = personsCatalog.find(x => x.identification === cedula);
+  if (p) {
+    const el = document.querySelector(`[data-block="${tipo}"]`);
+    el.querySelector('[data-field="name"]').value = p.name || '';
+    el.querySelector('[data-field="age"]').value = p.age || '';
+    el.querySelector('[data-field="position"]').value = p.position || '';
+  }
+}
+
+async function savePersonToCatalog(p) {
+  // Solo guardar si es válido
+  if (!p.identification || !p.name) return;
+  try {
+    await fetch('/api/persons', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(p)
+    });
+    // No recargamos todo el catálogo inmediatamente para no saturar,
+    // pero actualizamos el local por si se usa de nuevo sin refrescar
+    const idx = personsCatalog.findIndex(x => x.identification === p.identification);
+    if (idx >= 0) personsCatalog[idx] = { ...personsCatalog[idx], ...p };
+    else personsCatalog.push(p);
+  } catch(e) {}
+}
+
+// ── Validación y Filtrado de cédula ──────────────────────────────────────────
+function sanitizarCedula(input) {
+  // Permitir solo números y guiones (según solicitud de no permitir letras)
+  input.value = input.value.replace(/[^0-9\-]/g, '');
+}
+
+function validarCedula(v) {
+  if (!v || !v.trim()) return false;
+  const cleaned = v.trim().toUpperCase();
+  const patterns = [
+    /^(1[0-3]|[1-9])-\d{1,4}-\d{1,5}$/,
+    /^E-\d{1,4}-\d{1,7}$/,
+    /^N-\d{1,4}-\d{1,5}$/,
+    /^PE-\d{1,4}-\d{1,5}$/
+  ];
+  return patterns.some(p => p.test(cleaned));
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = `toast ${type} show`;
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ── Esquemas de colores dinámicos (se cargan del servidor) ────────────────────
+let resultSchemes = {};
+
+async function loadResultSchemes() {
+  try {
+    const res = await fetch('/api/result-schemes');
+    if (res.ok) resultSchemes = await res.json();
+  } catch (e) { console.error('Error cargando esquemas de resultados:', e); }
+}
+
+// ── Chip de color ─────────────────────────────────────────────────────────────
+function chipHtml(tipo, resultText) {
+  // Buscar en el esquema correspondiente (audiometria o espirometria)
+  const scheme = resultSchemes[tipo];
+  let style = '';
+  
+  if (scheme && scheme.options) {
+    const option = scheme.options.find(opt => 
+      opt.label === resultText || opt.table_label === resultText
+    );
+    if (option) {
+      style = `background-color: ${option.bg}; color: ${option.fg}; border: 1px solid ${option.chart_color || option.fg}44;`;
+    }
+  }
+
+  // Fallback si no se encuentra en el esquema
+  if (!style) {
+    const rl = (resultText||'').toLowerCase();
+    let cls = 'chip-normal';
+    if (rl.includes('alterado') || rl.includes('restricción') || rl.includes('obstrucción') || rl.includes('mixto')) cls = 'chip-alterado';
+    if (rl.includes('vigilancia')) cls = 'chip-vigilancia';
+    return `<span class="chip ${cls}">${resultText}</span>`;
+  }
+
+  return `<span class="chip" style="${style} padding: 2px 8px; border-radius: 6px; font-weight: bold; font-size: 11px;">${resultText}</span>`;
+}
+
+// ── Renderizar tabla de un bloque ─────────────────────────────────────────────
+function renderTable(tipo) {
+  const el = document.querySelector(`[data-block="${tipo}"]`);
+  if (!el) return;
+  const tbody = el.querySelector('[data-tbody]');
+  const emptyRow = el.querySelector('[data-empty]');
+  Array.from(tbody.querySelectorAll('tr:not([data-empty])')).forEach(r => r.remove());
+
+  const rows = state[tipo];
+  if (rows.length === 0) {
+    emptyRow.style.display = '';
+  } else {
+    emptyRow.style.display = 'none';
+    rows.forEach((e, i) => {
+      const tr = document.createElement('tr');
+      tr.className = 'hover:bg-surface-container-low transition-colors';
+      tr.innerHTML = `
+        <td class="px-4 py-3 text-center text-outline">${i+1}</td>
+        <td class="px-4 py-3 font-medium">${e.name}</td>
+        <td class="px-4 py-3 text-on-surface-variant">${e.cedula}</td>
+        <td class="px-4 py-3 text-on-surface-variant text-center">${e.age||'—'}</td>
+        <td class="px-4 py-3 text-on-surface-variant">${e.position}</td>
+        <td class="px-4 py-3">${chipHtml(tipo, e.result)}</td>
+        <td class="px-4 py-3 text-right space-x-2">
+          <button class="text-primary hover:underline text-xs font-bold" onclick="editRow('${tipo}',${i})">Editar</button>
+          <button class="text-error hover:underline text-xs font-bold" onclick="deleteRow('${tipo}',${i})">Eliminar</button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+  }
+}
+
+// ── Editar fila ───────────────────────────────────────────────────────────────
+function editRow(tipo, i) {
+  const e = state[tipo][i];
+  const el = document.querySelector(`[data-block="${tipo}"]`);
+  el.querySelector('[data-field="name"]').value = e.name;
+  el.querySelector('[data-field="cedula"]').value = e.cedula;
+  el.querySelector('[data-field="age"]').value = e.age;
+  el.querySelector('[data-field="position"]').value = e.position;
+  el.querySelector('[data-field="result"]').value = e.result;
+  state.editingIndex[tipo] = i;
+  el.querySelector('[data-action="add"]').innerHTML =
+    '<span class="material-symbols-outlined" style="font-size:18px;">check</span> Guardar cambios';
+  el.querySelector('[data-field="name"]').focus();
+  el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+// ── Eliminar fila ─────────────────────────────────────────────────────────────
+function deleteRow(tipo, i) {
+  if (!confirm('¿Eliminar este resultado?')) return;
+  state[tipo].splice(i, 1);
+  renderTable(tipo);
+  autoSave();
+}
+
+// ── Limpiar formulario ────────────────────────────────────────────────────────
+function clearForm(tipo) {
+  const el = document.querySelector(`[data-block="${tipo}"]`);
+  el.querySelectorAll('[data-field]').forEach(f => {
+    if (f.tagName === 'SELECT') { f.selectedIndex = 0; }
+    else { f.value = ''; }
+    f.classList.remove('invalid');
+  });
+  el.querySelectorAll('[data-err]').forEach(e => e.classList.remove('show'));
+  state.editingIndex[tipo] = null;
+  el.querySelector('[data-action="add"]').innerHTML =
+    '<span class="material-symbols-outlined" style="font-size:18px;">add</span> Agregar';
+}
+
+// ── Validar y agregar entrada ─────────────────────────────────────────────────
+function addEntry(tipo) {
+  const el = document.querySelector(`[data-block="${tipo}"]`);
+  const get = field => el.querySelector(`[data-field="${field}"]`);
+  const errEl = key => el.querySelector(`[data-err="${key}"]`);
+
+  const name     = get('name').value.trim();
+  const cedula   = get('cedula').value.trim();
+  const age      = get('age').value.trim();
+  const position = get('position').value.trim();
+  const result   = get('result').value;
+
+  let valid = true;
+  const setErr = (field, errKey, show) => {
+    get(field).classList.toggle('invalid', show);
+    errEl(errKey).classList.toggle('show', show);
+    if (show) valid = false;
+  };
+
+  setErr('name', 'name', !name);
+  setErr('cedula', 'cedula', !validarCedula(cedula));
+  setErr('position', 'position', !position);
+  if (!valid) return;
+
+  const entry = { name, cedula, age, position, result };
+
+  if (state.editingIndex[tipo] !== null) {
+    state[tipo][state.editingIndex[tipo]] = entry;
+  } else {
+    state[tipo].push(entry);
+  }
+
+  // Sincronizar con la base de datos de personas
+  savePersonToCatalog({ name, identification: cedula, age, position });
+
+  clearForm(tipo);
+  renderTable(tipo);
+  autoSave();
+}
+
+// ── Crear bloque dinámico ─────────────────────────────────────────────────────
+function createBlock(tipo) {
+  const cfg = BLOCK_CONFIG[tipo];
+  const tpl = document.getElementById('block-tpl');
+  const clone = tpl.content.cloneNode(true);
+  const root = clone.querySelector('div');
+  root.setAttribute('data-block', tipo);
+
+  // cabecera
+  root.querySelector('.block-hdr').classList.add(cfg.headerClass);
+  root.querySelector('.block-icon').textContent = cfg.icon;
+  root.querySelector('.block-title').textContent = cfg.title;
+  root.querySelector('.block-subtitle').textContent = cfg.subtitle;
+
+  // opciones de resultado
+  const sel = root.querySelector('[data-field="result"]');
+  cfg.resultados.forEach(r => sel.add(new Option(r, r)));
+
+  // Filtrado de entrada para cédula
+  const cedInput = root.querySelector('[data-field="cedula"]');
+  cedInput.addEventListener('input', () => {
+    sanitizarCedula(cedInput);
+    buscarPersona(tipo, cedInput.value.trim());
+  });
+
+  // botones
+  root.querySelector('[data-action="add"]').addEventListener('click', () => addEntry(tipo));
+  root.querySelector('[data-action="clear-form"]').addEventListener('click', () => clearForm(tipo));
+  root.querySelector('[data-action="clear-table"]').addEventListener('click', () => {
+    if (state[tipo].length === 0) return;
+    if (!confirm('¿Eliminar todos los resultados de este bloque?')) return;
+    state[tipo] = [];
+    renderTable(tipo);
+    autoSave();
+  });
+
+  // auto-uppercase cédula (y filtrar letras según solicitud)
+  root.querySelector('[data-field="cedula"]').addEventListener('input', function() {
+    this.value = this.value.toUpperCase().replace(/[^0-9\-]/g,'');
+  });
+
+  return root;
+}
+
+// ── Persistencia ──────────────────────────────────────────────────────────────
+async function autoSave(showIndicator = false) {
+  try {
+    const existing = await fetch('/api/report').then(r => r.json()).catch(() => ({}));
+    existing.resultados_audiometria = state.audiometria;
+    existing.resultados_espirometria = state.espirometria;
+    const res = await fetch('/api/report', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(existing)
+    });
+    if (res.ok && showIndicator) showToast('Borrador guardado correctamente ✓');
+  } catch(e) { console.error('autoSave error', e); }
+}
+
+function collectFormData() {
+  return {
+    resultados_audiometria: state.audiometria,
+    resultados_espirometria: state.espirometria
+  };
+}
+
+async function saveReport() {
+  await autoSave(true);
+}
+
+async function loadData() {
+  await loadPage();
+}
+
+window.loadData = loadData;
+window.saveReport = saveReport;
+window.autoSave = autoSave;
+window.collectFormData = collectFormData;
+
+// ── Cargar y renderizar todo ──────────────────────────────────────────────────
+async function loadPage() {
+  try {
+    await Promise.all([loadPersons(), loadResultSchemes()]);
+    const report = await fetch('/api/report').then(r => r.json()).catch(() => ({}));
+    const tipo = (report.report_type || 'audiometria').toLowerCase();
+
+    // determinar qué bloques mostrar
+    const hasAudio  = tipo.includes('audiometri');
+    const hasEspiro = tipo.includes('espirom');
+
+    // Subtítulo descriptivo
+    let subtitleText = '';
+    if (hasAudio && hasEspiro) subtitleText = 'Informe combinado: Audiometría y Espirometría';
+    else if (hasEspiro) subtitleText = 'Informe de Espirometría';
+    else subtitleText = 'Informe de Audiometría';
+    document.getElementById('subtitle').textContent = subtitleText;
+
+    // cargar datos guardados
+    if (Array.isArray(report.resultados_audiometria)) state.audiometria = report.resultados_audiometria;
+    if (Array.isArray(report.resultados_espirometria)) state.espirometria = report.resultados_espirometria;
+
+    // construir bloques
+    const container = document.getElementById('blocks-container');
+    container.innerHTML = '';
+
+    if (hasAudio || (!hasAudio && !hasEspiro)) {
+      container.appendChild(createBlock('audiometria'));
+      renderTable('audiometria');
+    }
+    if (hasEspiro) {
+      container.appendChild(createBlock('espirometria'));
+      renderTable('espirometria');
+    }
+
+  } catch(e) {
+    console.error('Error cargando página:', e);
+    document.getElementById('blocks-container').innerHTML =
+      '<p class="text-error text-sm">Error al cargar. Asegúrese de que el servidor esté corriendo.</p>';
+  }
+}
+
+// ── Bindings ──────────────────────────────────────────────────────────────────
+window.saveReport = saveReport;
+window.loadData = loadPage;
+window.addEventListener('DOMContentLoaded', loadPage);
+</script>
+</body></html>

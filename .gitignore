@@ -42,3 +42,12 @@ htmlcov/
 # Environment variables
 .env
 .env.local
+
+# Release binaries and scratch folder
+release/
+scratch/
+installer/dist/
+installer/output/
+*.log
+err.txt
+*.zip

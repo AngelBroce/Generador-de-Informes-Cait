@@ -70,27 +70,55 @@ class PDFGenerator:
             if watermark_logo:
                 self._add_watermark_logo(pdf_canvas, watermark_logo)
 
+            # 1. PORTADA / PRESENTACIÓN (Página 1)
             self._draw_header(pdf_canvas, report_data)
-            self._draw_general_info(pdf_canvas, report_data)
             self._draw_footer(pdf_canvas, page_number=1)
+            
+            # 2. TABLA DE CONTENIDOS (Página 2+)
+            # El TOC ya maneja su propio showPage() al inicio
             last_page = self._draw_table_of_contents(
                 pdf_canvas,
                 report_data,
                 watermark_logo=watermark_logo,
                 start_page=2,
             )
-            company_last_page = self._draw_company_profile_page(
+
+            # 3. PERFIL DE EMPRESA (Página 3+)
+            last_page = self._draw_company_profile_page(
                 pdf_canvas,
                 report_data,
-                watermark_logo=watermark_logo,
                 page_number=last_page + 1,
+                watermark_logo=watermark_logo,
             )
 
-            evaluated_people = report_data.get("evaluated") or []
+            # Recolectar resultados de todas las fuentes posibles
+            evaluated_people = []
+            
+            # 1. Prioridad: Listas específicas del nuevo frontend (preservan tipo de prueba)
+            audio_res = report_data.get("resultados_audiometria") or []
+            for entry in audio_res:
+                if isinstance(entry, dict):
+                    cloned = entry.copy()
+                    cloned["test_type"] = "audiometria"
+                    evaluated_people.append(cloned)
+            
+            espiro_res = report_data.get("resultados_espirometria") or []
+            for entry in espiro_res:
+                if isinstance(entry, dict):
+                    cloned = entry.copy()
+                    cloned["test_type"] = "espirometria"
+                    evaluated_people.append(cloned)
+            
+            # 2. Compatibilidad con el formato antiguo (si las nuevas están vacías)
+            if not evaluated_people:
+                old_entries = report_data.get("evaluated") or []
+                evaluated_people.extend(old_entries)
+
             grouped_entries = self._group_evaluated_entries(evaluated_people)
             attachment_sections = []
-            current_page = company_last_page
-            for dataset_key in self._determine_result_dataset_keys(report_data.get("type", "")):
+            current_page = last_page
+            report_type_val = report_data.get("report_type") or report_data.get("type") or "audiometria"
+            for dataset_key in self._determine_result_dataset_keys(str(report_type_val)):
                 entries = grouped_entries.get(dataset_key, [])
                 if not entries:
                     continue
@@ -111,7 +139,8 @@ class PDFGenerator:
                     watermark_logo=watermark_logo,
                 )
 
-            conclusion_text = (report_data.get("conclusion") or "").strip()
+            # 5. CONCLUSIONES (Basado en el nuevo frontend 'conclusion_text' o el antiguo 'conclusion')
+            conclusion_text = (report_data.get("conclusion_text") or report_data.get("conclusion") or "").strip()
             if conclusion_text:
                 current_page = self._draw_conclusion_page(
                     pdf_canvas,
@@ -121,7 +150,8 @@ class PDFGenerator:
                     watermark_logo=watermark_logo,
                 )
 
-            recommendations_text = (report_data.get("recommendations") or "").strip()
+            # 6. RECOMENDACIONES (Basado en el nuevo frontend 'recommendations_text' o el antiguo 'recommendations')
+            recommendations_text = (report_data.get("recommendations_text") or report_data.get("recommendations") or "").strip()
             if recommendations_text:
                 current_page = self._draw_recommendations_page(
                     pdf_canvas,
@@ -140,25 +170,22 @@ class PDFGenerator:
                     page_number=current_page + 1,
                     watermark_logo=watermark_logo,
                 )
+            else:
+                # No dibujar la página si no hay equipo técnico
+                pass
 
-            calibration_certificates = self._resolve_calibration_certificates(report_data)
-            if calibration_certificates:
-                current_page = self._draw_calibration_certificates_page(
-                    pdf_canvas,
-                    report_data,
-                    calibration_certificates,
-                    page_number=current_page + 1,
-                    watermark_logo=watermark_logo,
-                )
-
-            calibration_files = self._resolve_calibration_files(report_data)
+            calibration_files = self._resolve_file_list(
+                report_data.get("calibration_files"), 
+                report_data=report_data, 
+                target_type="Certificado Calibración"
+            )
             if calibration_files:
                 cover_start = current_page + 1
                 current_page = self._draw_attachment_cover_page(
                     pdf_canvas,
                     report_data,
                     "CERTIFICADOS DE CALIBRACIÓN ADJUNTOS:",
-                    "Los documentos oficiales emitidos por los laboratorios se incluyen a continuación.",
+                    "Los certificados oficiales de los equipos se incluyen a continuación.",
                     calibration_files,
                     page_number=current_page + 1,
                     watermark_logo=watermark_logo,
@@ -170,7 +197,16 @@ class PDFGenerator:
                     "cover_start": cover_start,
                 })
 
-            audiogram_files = self._resolve_file_list(report_data.get("audiogram_files"))
+            # 8. ANEXOS PDF (Audiogramas, Espirometrías, etc.)
+            # Los protocolos con imágenes se dibujarán después de los anexos PDF al final de todo.
+
+            # 9. ANEXOS PDF (Audiogramas, Espirometrías, etc.)
+            # Recolectar archivos por categoría
+            audiogram_files = self._resolve_file_list(
+                report_data.get("audiogram_files"), 
+                report_data=report_data, 
+                target_type="Audiograma"
+            )
             if audiogram_files:
                 cover_start = current_page + 1
                 current_page = self._draw_attachment_cover_page(
@@ -189,7 +225,11 @@ class PDFGenerator:
                     "cover_start": cover_start,
                 })
 
-            spirometry_files = self._resolve_file_list(report_data.get("spirometry_files"))
+            spirometry_files = self._resolve_file_list(
+                report_data.get("spirometry_files"), 
+                report_data=report_data, 
+                target_type="Reporte Espirometría"
+            )
             if spirometry_files:
                 cover_start = current_page + 1
                 current_page = self._draw_attachment_cover_page(
@@ -208,7 +248,11 @@ class PDFGenerator:
                     "cover_start": cover_start,
                 })
 
-            attendance_files = self._resolve_file_list(report_data.get("attendance_files"))
+            attendance_files = self._resolve_file_list(
+                report_data.get("attendance_files"), 
+                report_data=report_data, 
+                target_type="Listado Asistencia"
+            )
             if attendance_files:
                 cover_start = current_page + 1
                 current_page = self._draw_attachment_cover_page(
@@ -227,31 +271,41 @@ class PDFGenerator:
                     "cover_start": cover_start,
                 })
 
+            # 10. PROTOCOLOS FINALES (Con imágenes y serie de pasos)
+            raw_type = report_data.get("report_type") or report_data.get("type") or ""
+            report_type = str(raw_type).lower()
+            
+            has_audio = "audio" in report_type
+            has_espiro = "espiro" in report_type or "respi" in report_type
+            
+            print(f"DEBUG PDF: Tipo detectado='{report_type}' | Audio={has_audio} | Espiro={has_espiro}")
+
+            if has_audio:
+                print("DEBUG PDF: Generando protocolo de Audiometría...")
+                current_page = self._draw_audiometry_protocol_page(
+                    pdf_canvas,
+                    report_data,
+                    page_number=current_page + 1,
+                    watermark_logo=watermark_logo,
+                    start_new_page=True
+                )
+
+            if has_espiro:
+                print("DEBUG PDF: Generando protocolo de Espirometría...")
+                current_page = self._draw_spirometry_protocol_page(
+                    pdf_canvas,
+                    report_data,
+                    page_number=current_page + 1,
+                    watermark_logo=watermark_logo,
+                    start_new_page=True
+                )
+
             pdf_canvas.save()
+            print(f"DEBUG PDF: Guardado final completado. Páginas totales aprox: {current_page}")
 
-            protocol_pdf = None
-            report_type = report_data.get("type", "")
-            normalized_type = (report_type or "").lower()
-            has_audio = "audiometr" in normalized_type
-            has_espiro = "espiro" in normalized_type
-
-            if has_audio and has_espiro:
-                protocol_pdf = [
-                    self._render_audiometry_protocol_pdf(report_data, watermark_logo),
-                    self._render_spirometry_protocol_pdf(report_data, watermark_logo),
-                ]
-            elif self._should_include_audiometry_protocol(report_type):
-                protocol_pdf = self._render_audiometry_protocol_pdf(report_data, watermark_logo)
-            elif self._should_include_spirometry_protocol(report_type):
-                protocol_pdf = self._render_spirometry_protocol_pdf(report_data, watermark_logo)
-
-            if attachment_sections or protocol_pdf:
+            if attachment_sections:
                 try:
-                    if isinstance(protocol_pdf, list):
-                        trailing = [path for path in protocol_pdf if path]
-                    else:
-                        trailing = [protocol_pdf] if protocol_pdf else []
-                    self._append_supporting_pdfs(temp_pdf_path, output_path, attachment_sections, trailing)
+                    self._append_supporting_pdfs(temp_pdf_path, output_path, attachment_sections, [])
                     temp_pdf_path = None
                 except Exception as merge_exc:  # pragma: no cover - merge fallback
                     print(f"Advertencia al adjuntar anexos: {merge_exc}")
@@ -336,137 +390,135 @@ class PDFGenerator:
         pdf_canvas.drawCentredString(
             self.page_width / 2,
             y,
-            "Panamá,Panamá Oeste",
+            "La Chorrera, Plaza Mitsue, planta baja posterior diagonal a los Bomberos, local 3, calle de la Leopoldo Castillo.",
         )
 
         return y
 
     def _draw_header(self, pdf_canvas: canvas.Canvas, report_data: Dict) -> None:
-        """Dibuja el encabezado institucional con espaciado más holgado."""
+        """Dibuja la portada del informe siguiendo estrictamente el diseño de la imagen de referencia."""
 
         y = self._draw_header_branding(pdf_canvas, report_data)
+        center_x = self.page_width / 2
+        accent_color = colors.HexColor("#1B5E20")
 
-        y -= 0.5 * inch
-        pdf_canvas.setFont("Helvetica-Bold", 14)
-        pdf_canvas.setFillColor(colors.HexColor("#2E7D32"))
-        pdf_canvas.drawCentredString(self.page_width / 2, y, "INFORME:")
+        # Helper para dibujar etiquetas subrayadas centradas
+        def draw_underlined_label(canvas_obj, text, cx, y_pos, font="Helvetica-Bold", size=11):
+            canvas_obj.setFont(font, size)
+            canvas_obj.setFillColor(accent_color)
+            canvas_obj.drawCentredString(cx, y_pos, text)
+            w = canvas_obj.stringWidth(text, font, size)
+            canvas_obj.setLineWidth(1)
+            canvas_obj.setStrokeColor(accent_color)
+            canvas_obj.line(cx - w/2, y_pos - 2, cx + w/2, y_pos - 2)
+
+        # 1. INFORME:
+        y -= 0.65 * inch
+        draw_underlined_label(pdf_canvas, "INFORME:", center_x, y)
+
+        # 2. TIPO DE EVALUACIÓN
+        y -= 0.35 * inch
+        raw_type = (report_data.get("report_type") or report_data.get("type") or "").strip()
+        normalized_type = raw_type.lower()
+        if not raw_type:
+             report_type_text = "INFORME TÉCNICO"
+        elif "audiometr" in normalized_type and "espirom" in normalized_type:
+            report_type_text = "EVALUACIÓN DE AUDIOMETRÍA Y ESPIROMETRÍA"
+        else:
+            report_type_text = f"EVALUACIÓN DE {raw_type.upper()}"
+            if "IÓN" in report_type_text: report_type_text = report_type_text.replace("IÓN", "IONES")
+            elif "IÁN" in report_type_text: report_type_text = report_type_text.replace("IÁN", "IANES")
+            else: report_type_text += "S"
+        
+        pdf_canvas.setFont("Helvetica-Bold", 12)
+        pdf_canvas.setFillColor(accent_color)
+        pdf_canvas.drawCentredString(center_x, y, report_type_text)
+
+        # 3. EMPRESA:
+        y -= 0.55 * inch
+        draw_underlined_label(pdf_canvas, "EMPRESA:", center_x, y)
+
+        # 4. NOMBRE DE EMPRESA
+        y -= 0.35 * inch
+        company_name = (report_data.get("company_name") or report_data.get("company") or "N/A").strip()
+        pdf_canvas.setFont("Helvetica-Bold", 12)
+        pdf_canvas.drawCentredString(center_x, y, company_name.upper())
+
+        # 5. ESTUDIO OCUPACIONAL:
+        y -= 0.55 * inch
+        draw_underlined_label(pdf_canvas, "ESTUDIO OCUPACIONAL:", center_x, y)
+
+        # 6. LOCALIZACIÓN / PLANTA
+        y -= 0.35 * inch
+        location = (report_data.get("location") or "N/A").strip()
+        pdf_canvas.setFont("Helvetica-Bold", 12)
+        pdf_canvas.drawCentredString(center_x, y, location.upper())
+
+        # 7. PREPARADO POR:
+        y -= 0.55 * inch
+        draw_underlined_label(pdf_canvas, "PREPARADO POR:", center_x, y)
+
+        # 8. BLOQUE DE EVALUADORES
+        technical_team = self._resolve_technical_team(report_data)
+        
+        def _draw_member_card(member: Dict, cx: float, top_y: float):
+            name = (member.get("name") or "N/A").upper()
+            details = [str(d).upper() for d in (member.get("details") or []) if str(d).strip()]
+            
+            line_y = top_y
+            pdf_canvas.setFont("Helvetica-Bold", 11)
+            pdf_canvas.setFillColor(accent_color)
+            pdf_canvas.drawCentredString(cx, line_y, name)
+            
+            pdf_canvas.setFont("Helvetica-Bold", 10)
+            for detail in details[:2]:
+                line_y -= 0.22 * inch
+                pdf_canvas.drawCentredString(cx, line_y, detail)
 
         y -= 0.35 * inch
-        pdf_canvas.setFont("Helvetica-Bold", 13)
-        raw_type = (report_data.get("type") or "evaluación").strip()
-        normalized_type = raw_type.lower()
-        if "audiometr" in normalized_type and "espirom" in normalized_type:
-            report_type_text = "AUDIOMETRÍA Y ESPIROMETRÍA"
+        if len(technical_team) >= 2:
+            _draw_member_card(technical_team[0], self.page_width * 0.25, y)
+            _draw_member_card(technical_team[1], self.page_width * 0.75, y)
+            y -= 0.5 * inch
         else:
-            report_type_text = f"EVALUACIÓN DE {raw_type.upper()}S"
-        pdf_canvas.drawCentredString(self.page_width / 2, y, report_type_text)
+            member = technical_team[0] if technical_team else {}
+            if member:
+                _draw_member_card(member, center_x, y)
+                y -= 0.5 * inch
 
-        y -= 0.45 * inch
+        # 9. CONTRAPARTE TÉCNICA:
+        y -= 0.35 * inch
+        draw_underlined_label(pdf_canvas, "CONTRAPARTE TECNICA:", center_x, y)
+
+        # 10. VALOR CONTRAPARTE
+        y -= 0.35 * inch
+        cp_name = (report_data.get("counterpart_name") or report_data.get("company_counterpart") or "").strip()
+        cp_role = (report_data.get("counterpart_role") or "").strip()
+        
         pdf_canvas.setFont("Helvetica-Bold", 11)
-        pdf_canvas.drawCentredString(self.page_width / 2, y, "EMPRESA:")
+        pdf_canvas.setFillColor(accent_color)
+        pdf_canvas.drawCentredString(center_x, y, (cp_name or "SIN CONTRAPARTE").upper())
+        if cp_role:
+            y -= 0.22 * inch
+            pdf_canvas.drawCentredString(center_x, y, cp_role.upper())
 
-        y -= 0.3 * inch
+        # 11. FECHA:
+        y -= 0.55 * inch
         pdf_canvas.setFont("Helvetica-Bold", 11)
-        pdf_canvas.setFillColor(colors.black)
-        pdf_canvas.drawCentredString(self.page_width / 2, y, report_data.get("company", "N/A").upper())
+        pdf_canvas.setFillColor(accent_color)
+        
+        label_fecha = "FECHA:"
+        w_label = pdf_canvas.stringWidth(label_fecha, "Helvetica-Bold", 11)
+        eval_date = (report_data.get("evaluation_date") or report_data.get("evaluation_dates") or report_data.get("date") or "N/A").strip().upper()
+        full_date_text = f"{label_fecha} {eval_date}"
+        w_full = pdf_canvas.stringWidth(full_date_text, "Helvetica-Bold", 11)
+        
+        start_x = center_x - w_full/2
+        pdf_canvas.drawString(start_x, y, full_date_text)
+        # Subrayar solo la palabra FECHA
+        pdf_canvas.setLineWidth(1)
+        pdf_canvas.line(start_x, y - 2, start_x + w_label - 2, y - 2)
 
-        y -= 0.4 * inch
-        pdf_canvas.setFont("Helvetica-Bold", 10)
-        pdf_canvas.setFillColor(colors.HexColor("#2E7D32"))
-        pdf_canvas.drawCentredString(
-            self.page_width / 2,
-            y,
-            f"ESTUDIO OCUPACIONAL: \"{report_data.get('location', 'N/A').upper()}\"",
-        )
-
-        y -= 0.45 * inch
-        pdf_canvas.drawCentredString(self.page_width / 2, y, "PREPARADO POR:")
-
-        technical_team = self._resolve_technical_team(report_data)
-        is_combined_report = (
-            "audiometr" in (report_data.get("type", "").lower())
-            and "espiro" in (report_data.get("type", "").lower())
-        )
-
-        if is_combined_report and len(technical_team) >= 2:
-            left_member = technical_team[0]
-            right_member = technical_team[1]
-
-            def _draw_member_block(member: Dict, center_x: float, top_y: float) -> None:
-                name = (member.get("name") or "N/A").upper()
-                details = [
-                    str(detail).upper()
-                    for detail in (member.get("details") or [])
-                    if str(detail).strip()
-                ]
-
-                line_y = top_y
-                pdf_canvas.setFont("Helvetica-Bold", 11)
-                pdf_canvas.setFillColor(colors.HexColor("#007A3D"))
-                pdf_canvas.drawCentredString(center_x, line_y, name)
-
-                pdf_canvas.setFont("Helvetica-Bold", 10)
-                for detail in details[:2]:
-                    line_y -= 0.24 * inch
-                    pdf_canvas.drawCentredString(center_x, line_y, detail)
-
-            y -= 0.3 * inch
-            left_x = self.page_width * 0.23
-            right_x = self.page_width * 0.77
-            _draw_member_block(left_member, left_x, y)
-            _draw_member_block(right_member, right_x, y)
-
-            y -= 0.72 * inch
-        else:
-            evaluator_profile = self._resolve_evaluator_profile(report_data)
-            evaluator_name = (evaluator_profile.get("name") or report_data.get("evaluator") or "N/A").upper()
-            header_label = (evaluator_profile.get("header_label") or evaluator_profile.get("title_label") or "LICENCIADA").upper()
-
-            y -= 0.3 * inch
-            pdf_canvas.setFont("Helvetica", 9)
-            pdf_canvas.setFillColor(colors.black)
-            pdf_canvas.drawCentredString(
-                self.page_width / 2,
-                y,
-                f"{header_label}: {evaluator_name}",
-            )
-
-            profession_line = evaluator_profile.get("profession") or "TERAPEUTA RESPIRATORIA"
-            y -= 0.25 * inch
-            pdf_canvas.drawCentredString(self.page_width / 2, y, profession_line)
-
-            registry_line = evaluator_profile.get("registry") or "REGISTRO IDÓNEO 124"
-            y -= 0.2 * inch
-            pdf_canvas.drawCentredString(self.page_width / 2, y, registry_line)
-
-        counterpart_name = (report_data.get("company_counterpart") or "").strip()
-        counterpart_role = (report_data.get("counterpart_role") or "").strip()
-        if counterpart_name:
-            y -= 0.45 * inch
-            pdf_canvas.setFont("Helvetica-Bold", 10)
-            pdf_canvas.setFillColor(colors.HexColor("#2E7D32"))
-            pdf_canvas.drawCentredString(self.page_width / 2, y, "CONTRAPARTE TÉCNICA:")
-
-            y -= 0.3 * inch
-            pdf_canvas.setFont("Helvetica", 9)
-            pdf_canvas.setFillColor(colors.black)
-            pdf_canvas.drawCentredString(self.page_width / 2, y, counterpart_name.upper())
-
-            if counterpart_role:
-                y -= 0.25 * inch
-                pdf_canvas.drawCentredString(self.page_width / 2, y, counterpart_role.upper())
-
-        y -= 0.45 * inch
-        pdf_canvas.setFont("Helvetica-Bold", 10)
-        pdf_canvas.setFillColor(colors.HexColor("#2E7D32"))
-        pdf_canvas.drawCentredString(self.page_width / 2, y, "FECHA DE REALIZACIÓN:")
-
-        y -= 0.25 * inch
-        pdf_canvas.setFont("Helvetica-Bold", 11)
-        pdf_canvas.setFillColor(colors.black)
-        pdf_canvas.drawCentredString(self.page_width / 2, y, report_data.get("date", "N/A").upper())
-
-        y -= 0.5 * inch
 
     def _draw_general_info(self, pdf_canvas: canvas.Canvas, report_data: Dict) -> None:
         """Información general (ya incluida en el encabezado)."""
@@ -486,6 +538,8 @@ class PDFGenerator:
         if watermark_logo:
             self._add_watermark_logo(pdf_canvas, watermark_logo)
 
+        # Solo dibujamos el branding si no estamos en la página 1 (que ya lo tiene)
+        # Aunque aquí start_page suele ser 2.
         y = self._draw_header_branding(pdf_canvas, report_data)
         y -= 0.35 * inch
 
@@ -583,15 +637,24 @@ class PDFGenerator:
                     y,
                     label,
                 )
-                if self._links_are_relative(report_data):
+                # Siempre intentar poner el link si el archivo es local o si estamos en modo relativo
+                link_path = None
+                is_rel = self._links_are_relative(report_data)
+                
+                if is_rel:
+                    link_path = str(Path(folder_path or "") / Path(file_path).name) if folder_path else Path(file_path).name
+                else:
+                    link_path = self._resolve_path(file_path)
+                
+                if link_path:
                     self._add_file_link(
                         pdf_canvas,
-                        str(Path(folder_path or "") / Path(file_path).name) if folder_path else Path(file_path).name,
+                        link_path,
                         self.left_margin + 12,
                         y - 2,
                         420,
                         12,
-                        relative=True,
+                        relative=is_rel,
                     )
                 y -= 0.28 * inch
 
@@ -625,66 +688,57 @@ class PDFGenerator:
         pdf_canvas.line(self.left_margin, y, self.page_width - self.right_margin, y)
         y -= 0.35 * inch
 
-        counterpart_name = (report_data.get("company_counterpart") or "").strip()
+        # Contraparte Técnica (Resolver desde el perfil enriquecido o los datos base)
+        counterpart_name = (report_data.get("counterpart_name") or report_data.get("company_counterpart") or "").strip()
         counterpart_role = (report_data.get("counterpart_role") or "").strip()
+        
+        if not counterpart_name or not counterpart_name.strip():
+            counterpart_name = "SIN CONTRAPARTE"
 
+        # Labels específicos y orden exacto según imagen de referencia
         rows = [
-            ("Nombre de la empresa:", report_data.get("company", "N/A")),
-            (
-                "Área evaluada:",
-                report_data.get("plant") or report_data.get("location", "N/A"),
-            ),
-            ("Actividad principal:", report_data.get("activity", "N/A")),
-            (
-                "País en que se realizó:",
-                report_data.get("country") or report_data.get("location", "N/A"),
-            ),
-            (
-                "Fechas del estudio:",
-                report_data.get("study_dates", report_data.get("date", "N/A")),
-            ),
+            ("Nombre de la empresa:", report_data.get("company_name") or report_data.get("company") or "N/A"),
+            ("Planta evaluada:", report_data.get("location") or report_data.get("plant") or "N/A"),
+            ("Actividad principal:", report_data.get("company_activity") or report_data.get("activity") or "N/A"),
+            ("Contraparte técnica por la empresa:", counterpart_name),
+            ("Cargo del personal encargado:", counterpart_role or "N/A"),
+            ("País en que se realizó:", report_data.get("country") or "Panamá, República de Panamá"),
+            ("Dirección de la empresa:", report_data.get("company_address") or "N/A"),
+            ("Fecha del estudio:", report_data.get("study_dates") or report_data.get("evaluation_date") or report_data.get("date") or "N/A"),
         ]
-
-        if counterpart_name:
-            rows.insert(
-                3,
-                ("Contraparte técnica por la empresa:", counterpart_name),
-            )
-            if counterpart_role:
-                rows.insert(4, ("Cargo del personal encargado:", counterpart_role))
 
         bullet_symbol = "❖"
         bullet_color = colors.HexColor("#2E7D32")
         bullet_x = self.left_margin
-        label_x = bullet_x + 0.2 * inch
-        value_x = label_x + 2.7 * inch
-        label_width = value_x - label_x - 0.15 * inch
+        label_x = self.left_margin + 0.25 * inch
+        label_width = 3.0 * inch  # Suficiente para el label más largo subrayado
+        value_x = label_x + label_width + 0.1 * inch
         value_width = self.page_width - self.right_margin - value_x
         line_height = 0.22 * inch
 
         for label, value in rows:
+            pdf_canvas.setFont("Helvetica-Bold", 11)
             pdf_canvas.setFillColor(bullet_color)
-            pdf_canvas.setFont("Helvetica", 12)
             pdf_canvas.drawString(bullet_x, y, bullet_symbol)
 
-            label_lines = self._wrap_text(label, "Helvetica-Bold", 11, label_width, pdf_canvas)
-            pdf_canvas.setFont("Helvetica-Bold", 11)
-            label_line_y = y
-            for line in label_lines:
-                pdf_canvas.drawString(label_x, label_line_y, line)
-                label_line_y -= line_height
+            # Dibujar label con subrayado (como en la imagen)
+            pdf_canvas.setFillColor(colors.black)
+            pdf_canvas.drawString(label_x, y, label)
+            label_w = pdf_canvas.stringWidth(label, "Helvetica-Bold", 11)
+            pdf_canvas.setLineWidth(1)
+            pdf_canvas.setStrokeColor(colors.black)
+            pdf_canvas.line(label_x, y - 2, label_x + label_w, y - 2)
 
-            # Valores en MAYUSCULAS para consistencia visual
-            value_str = str(value or "N/A").upper()
+            # Valores
+            value_str = str(value or "N/A").strip()
             value_lines = self._wrap_text(value_str, "Helvetica", 11, value_width, pdf_canvas)
             pdf_canvas.setFont("Helvetica", 11)
-            pdf_canvas.setFillColor(colors.black)
             value_line_y = y
             for line in value_lines:
                 pdf_canvas.drawString(value_x, value_line_y, line)
                 value_line_y -= line_height
 
-            row_height = max(len(label_lines), len(value_lines)) * line_height
+            row_height = max(1, len(value_lines)) * line_height
             y -= row_height + 0.15 * inch
 
             if y <= self.bottom_margin + 0.75 * inch:
@@ -1105,24 +1159,19 @@ class PDFGenerator:
 
         # ── Agrupar en Normal / Unilateral / Bilateral usando chart_group ──
         if dataset_key == "audiometria":
-            group_defs = [
-                ("normal",     "NORMAL"),
-                ("unilateral", "UNILATERAL"),
-                ("bilateral",  "BILATERAL"),
+            rows = [
+                ("NORMAL",     stats.get("_group_normal", 0)),
+                ("UNILATERAL", stats.get("_group_unilateral", 0)),
+                ("BILATERAL",  stats.get("_group_bilateral", 0)),
             ]
-            group_counts = {g: 0 for g, _ in group_defs}
-            for opt in scheme.get("options", []):
-                grp = opt.get("chart_group")
-                if grp in group_counts:
-                    group_counts[grp] += stats.get(opt["key"], 0)
-            rows = [(label, group_counts[grp]) for grp, label in group_defs]
         else:
-            # Para espirometría: usar opciones individuales (pocas)
+            # Para espirometría: usar opciones individuales
             rows = [
                 (option.get("table_label", option["label"]).upper(), stats.get(option["key"], 0))
                 for option in scheme.get("options", [])
-                if stats.get(option["key"], 0) > 0
             ]
+            rows = [r for r in rows if r[1] > 0]
+            
         rows.append(("TOTAL", stats.get("total", 0)))
 
         font_size = 10
@@ -1685,10 +1734,23 @@ class PDFGenerator:
 
     def _get_resource_base(self) -> Path:
         """Obtiene la raiz de recursos tanto en modo normal como en ejecutable."""
-
         base_path = getattr(sys, "_MEIPASS", None)
         if base_path:
             return Path(base_path)
+            
+        # Intentar varias rutas comunes para encontrar la raíz del proyecto
+        possible_roots = [
+            Path(__file__).resolve().parents[2],
+            Path(sys.argv[0]).resolve().parent,
+            Path.cwd()
+        ]
+        
+        for root in possible_roots:
+            if (root / "imagenes de protocolo").exists():
+                return root
+            if (root / "protocolo").exists():
+                return root
+                
         return Path(__file__).resolve().parents[2]
 
     def _draw_technical_team_page(
@@ -1719,48 +1781,124 @@ class PDFGenerator:
         bullet_indent = 0.28 * inch
         line_spacing = 0.24 * inch
 
-        for member in normalized_entries:
-            available_width = text_width - bullet_indent
-            name_lines = self._wrap_text(member.get("name", ""), "Helvetica-Bold", 12, available_width, pdf_canvas)
-            detail_lines = []
-            for detail in member.get("details", []):
-                detail = (detail or "").strip()
-                if not detail:
-                    continue
-                detail_lines.extend(self._wrap_text(detail, "Helvetica", 11, available_width, pdf_canvas))
-
-            total_lines = len(name_lines) + len(detail_lines)
-            required_height = total_lines * line_spacing + 0.3 * inch
-
-            if y - required_height <= self.bottom_margin:
-                self._draw_footer(pdf_canvas, page_number=current_page)
-                current_page += 1
-                y = self._prepare_text_section_header(
-                    pdf_canvas,
-                    report_data,
-                    "EQUIPO TÉCNICO (cont.):",
-                    watermark_logo,
-                )
-
-            pdf_canvas.setFont("Helvetica-Bold", 13)
-            pdf_canvas.setFillColor(bullet_color)
-            pdf_canvas.drawString(self.left_margin, y, bullet_symbol)
-
-            text_x = self.left_margin + bullet_indent
-            line_y = y
-            pdf_canvas.setFillColor(colors.black)
-            pdf_canvas.setFont("Helvetica-Bold", 12)
-            for line in name_lines:
-                pdf_canvas.drawString(text_x, line_y, line)
-                line_y -= line_spacing
-
-            if detail_lines:
+        # Si hay exactamente 2, usar dos columnas para ahorrar espacio y cumplir diseño
+        if len(normalized_entries) == 2:
+            col_width = (self.page_width / 2) - self.left_margin - 0.2 * inch
+            x_positions = [self.left_margin, self.page_width / 2 + 0.1 * inch]
+            
+            max_y_after_row = y
+            for idx, member in enumerate(normalized_entries):
+                curr_x = x_positions[idx]
+                curr_y = y
+                
+                pdf_canvas.setFont("Helvetica-Bold", 13)
+                pdf_canvas.setFillColor(bullet_color)
+                pdf_canvas.drawString(curr_x, curr_y, bullet_symbol)
+                
+                text_x = curr_x + bullet_indent
+                inner_width = col_width - bullet_indent
+                
+                pdf_canvas.setFillColor(colors.black)
+                pdf_canvas.setFont("Helvetica-Bold", 12)
+                name_lines = self._wrap_text(member.get("name", ""), "Helvetica-Bold", 12, inner_width, pdf_canvas)
+                for line_idx, line in enumerate(name_lines):
+                    pdf_canvas.drawString(text_x, curr_y, line)
+                    if line_idx == 0 and member.get("credential_file"):
+                        cred_path = self._resolve_path(member["credential_file"])
+                        if cred_path:
+                            self._add_file_link(
+                                pdf_canvas, cred_path, text_x, curr_y - 2, 
+                                pdf_canvas.stringWidth(line, "Helvetica-Bold", 12), 12,
+                                relative=self._links_are_relative(report_data)
+                            )
+                    curr_y -= line_spacing
+                
                 pdf_canvas.setFont("Helvetica", 11)
-                for line in detail_lines:
+                for detail in member.get("details", []):
+                    detail = (detail or "").strip()
+                    if not detail: continue
+                    d_lines = self._wrap_text(detail, "Helvetica", 11, inner_width, pdf_canvas)
+                    for d_line in d_lines:
+                        pdf_canvas.drawString(text_x, curr_y, d_line)
+                        curr_y -= line_spacing
+                
+                # Link explícito debajo
+                if member.get("credential_file"):
+                    cred_path = self._resolve_path(member["credential_file"])
+                    if cred_path:
+                        pdf_canvas.setFont("Helvetica-BoldOblique", 10)
+                        pdf_canvas.setFillColor(colors.HexColor("#0056b3"))
+                        link_text = "Ver Certificado de Idoneidad"
+                        pdf_canvas.drawString(text_x, curr_y, link_text)
+                        self._add_file_link(
+                            pdf_canvas, cred_path, text_x, curr_y - 2,
+                            pdf_canvas.stringWidth(link_text, "Helvetica-BoldOblique", 10), 10,
+                            relative=self._links_are_relative(report_data)
+                        )
+                        curr_y -= line_spacing
+                
+                max_y_after_row = min(max_y_after_row, curr_y)
+            y = max_y_after_row - 0.22 * inch
+        else:
+            # Layout original de una sola columna
+            for member in normalized_entries:
+                available_width = text_width - bullet_indent
+                name_lines = self._wrap_text(member.get("name", ""), "Helvetica-Bold", 12, available_width, pdf_canvas)
+                detail_lines = []
+                for detail in member.get("details", []):
+                    detail = (detail or "").strip()
+                    if not detail: continue
+                    detail_lines.extend(self._wrap_text(detail, "Helvetica", 11, available_width, pdf_canvas))
+
+                total_lines = len(name_lines) + len(detail_lines)
+                required_height = total_lines * line_spacing + 0.3 * inch
+
+                if y - required_height <= self.bottom_margin:
+                    self._draw_footer(pdf_canvas, page_number=current_page)
+                    current_page += 1
+                    y = self._prepare_text_section_header(pdf_canvas, report_data, "EQUIPO TÉCNICO (cont.):", watermark_logo)
+
+                pdf_canvas.setFont("Helvetica-Bold", 13)
+                pdf_canvas.setFillColor(bullet_color)
+                pdf_canvas.drawString(self.left_margin, y, bullet_symbol)
+
+                text_x = self.left_margin + bullet_indent
+                line_y = y
+                pdf_canvas.setFillColor(colors.black)
+                pdf_canvas.setFont("Helvetica-Bold", 12)
+                for line_idx, line in enumerate(name_lines):
                     pdf_canvas.drawString(text_x, line_y, line)
+                    if line_idx == 0 and member.get("credential_file"):
+                        cred_path = self._resolve_path(member["credential_file"])
+                        if cred_path:
+                            self._add_file_link(
+                                pdf_canvas, cred_path, text_x, line_y - 2, 
+                                pdf_canvas.stringWidth(line, "Helvetica-Bold", 12), 12,
+                                relative=self._links_are_relative(report_data)
+                            )
                     line_y -= line_spacing
 
-            y = line_y - 0.22 * inch
+                if detail_lines:
+                    pdf_canvas.setFont("Helvetica", 11)
+                    for line in detail_lines:
+                        pdf_canvas.drawString(text_x, line_y, line)
+                        line_y -= line_spacing
+                    
+                if member.get("credential_file"):
+                    cred_path = self._resolve_path(member["credential_file"])
+                    if cred_path:
+                        pdf_canvas.setFont("Helvetica-BoldOblique", 10)
+                        pdf_canvas.setFillColor(colors.HexColor("#0056b3"))
+                        link_text = "Ver Certificado de Idoneidad"
+                        pdf_canvas.drawString(text_x, line_y, link_text)
+                        self._add_file_link(
+                            pdf_canvas, cred_path, text_x, line_y - 2,
+                            pdf_canvas.stringWidth(link_text, "Helvetica-BoldOblique", 10), 10,
+                            relative=self._links_are_relative(report_data)
+                        )
+                        line_y -= line_spacing
+
+                y = line_y - 0.22 * inch
 
         credential_links = []
         if self._links_are_relative(report_data):
@@ -1879,6 +2017,7 @@ class PDFGenerator:
 
             current_y = self._draw_calibration_table_row(
                 pdf_canvas,
+                report_data,
                 entry,
                 columns,
                 column_widths,
@@ -1963,6 +2102,7 @@ class PDFGenerator:
     def _draw_calibration_table_row(
         self,
         pdf_canvas: canvas.Canvas,
+        report_data: Dict,
         entry: Dict,
         columns: list,
         column_widths: list,
@@ -1998,8 +2138,23 @@ class PDFGenerator:
             text_y = current_y - 0.18 * inch
             pdf_canvas.setFont("Helvetica", 10)
             pdf_canvas.setFillColor(colors.black)
-            for line in lines:
+            for line_idx, line in enumerate(lines):
                 pdf_canvas.drawString(text_x, text_y, line)
+                
+                # Si es la columna de equipo o certificado y hay adjunto, poner el link
+                key = column.get("key")
+                if line_idx == 0 and (key == "equipment" or key == "certificate") and entry.get("attachment"):
+                    att_path = self._resolve_path(entry["attachment"])
+                    if att_path:
+                        self._add_file_link(
+                            pdf_canvas,
+                            att_path,
+                            text_x,
+                            text_y - 2,
+                            width - 8,
+                            12,
+                            relative=self._links_are_relative(report_data)
+                        )
                 text_y -= line_spacing
             x += width
             if idx < len(lines_per_column) - 1:
@@ -2172,16 +2327,18 @@ class PDFGenerator:
         if isinstance(profile, dict):
             return profile
 
-        fallback_name = (report_data.get("evaluator") or "N/A").strip() or "N/A"
+        # Intentar obtener el nombre directamente si no hay perfil
+        eval_name = (report_data.get("evaluator") or report_data.get("evaluator_name") or "").strip()
+        
+        if not eval_name:
+            return {}
+
         return {
-            "name": fallback_name,
+            "name": eval_name,
             "header_label": "LICENCIADA",
-            "profession": "TERAPEUTA RESPIRATORIA",
-            "registry": "REGISTRO IDÓNEO 124",
-            "technical_details": [
-                "Terapeuta Respiratoria,",
-                "Registro Idóneo 124.",
-            ],
+            "profession": "",
+            "registry": "",
+            "technical_details": [],
         }
 
     def _resolve_technical_team(self, report_data: Dict) -> list:
@@ -2222,7 +2379,11 @@ class PDFGenerator:
                         if normalized and normalized not in details:
                             details.append(normalized)
 
-                    resolved.append({"name": name, "details": details})
+                    # El archivo de idoneidad debe venir ya inyectado desde la API en el objeto 'member'
+                    # o estar disponible en el perfil del evaluador principal.
+                    cred_file = member.get("credential_file")
+                    
+                    resolved.append({"name": name, "details": details, "credential_file": cred_file})
 
                 elif isinstance(member, str):
                     name = member.strip()
@@ -2236,14 +2397,10 @@ class PDFGenerator:
         if profile_entry:
             return [profile_entry]
 
-        if raw_team is None:
-            return [
-                {
-                    "name": item["name"],
-                    "details": list(item.get("details", [])),
-                }
-                for item in DEFAULT_TECHNICAL_TEAM
-            ]
+        # Solo usar equipo por defecto si NO se provee ninguna lista (raw_team is None)
+        # y si hay otros datos que indiquen que el informe no está vacío.
+        # Pero para evitar "información fantasma", mejor no devolver nada si no hay nada.
+        # if raw_team is None: ... (removido para evitar confusión del usuario)
 
         return []
 
@@ -2278,6 +2435,25 @@ class PDFGenerator:
                         ).strip(),
                     }
                 )
+
+        # Integrar de la lista unificada 'adjuntos'
+        adjuntos = report_data.get("adjuntos", [])
+        if isinstance(adjuntos, list):
+            for a in adjuntos:
+                if isinstance(a, dict) and a.get("tipo") == "Certificado Calibración":
+                    name = a.get("name") or "Certificado"
+                    # Evitar duplicados por nombre si ya se agregaron de las otras fuentes
+                    if not any(r.get("equipment") == name or r.get("attachment") == name for r in resolved):
+                        resolved.append({
+                            "equipment": name,
+                            "model": "N/D",
+                            "serial": "N/D",
+                            "certificate": "ADJUNTO",
+                            "calibration_date": "VER ANEXO",
+                            "valid_until": "VER ANEXO",
+                            "provider": "N/D",
+                            "attachment": name
+                        })
         return resolved
 
     def _resolve_calibration_files(self, report_data: Dict) -> list:
@@ -2289,54 +2465,92 @@ class PDFGenerator:
         # Prioridad 1: lista directa de archivos PDF seleccionados en la UI
         raw_files = report_data.get("calibration_files")
         if raw_files:
-            candidates = raw_files if isinstance(raw_files, list) else [raw_files]
-            for entry in candidates:
-                file_path = None
-                if isinstance(entry, str):
-                    file_path = entry
-                elif isinstance(entry, dict):
-                    file_path = entry.get("file") or entry.get("file_path") or entry.get("attachment")
-                if not file_path:
-                    continue
-                normalized = file_path.strip()
-                if normalized and os.path.exists(normalized) and normalized not in seen:
-                    seen.add(normalized)
-                    files.append(normalized)
+            files.extend(self._resolve_file_list(raw_files, report_data=report_data))
 
         # Prioridad 2: entradas del formulario de certificados (con ruta adjunta)
         raw_entries = report_data.get("calibration_certificates")
         if raw_entries:
-            candidates = raw_entries if isinstance(raw_entries, list) else [raw_entries]
-            for entry in candidates:
-                file_path = None
-                if isinstance(entry, str):
-                    file_path = entry
-                elif isinstance(entry, dict):
-                    file_path = entry.get("file") or entry.get("file_path") or entry.get("attachment")
-                if not file_path:
-                    continue
-                normalized = file_path.strip()
-                if normalized and os.path.exists(normalized) and normalized not in seen:
-                    seen.add(normalized)
-                    files.append(normalized)
+            files.extend(self._resolve_file_list(raw_entries, report_data=report_data))
+
+        # Eliminar duplicados manteniendo el orden
+        seen = set()
+        unique_files = []
+        for f in files:
+            if f not in seen:
+                seen.add(f)
+                unique_files.append(f)
+        files = unique_files
+
+        # Prioridad 3: Nueva lista unificada 'adjuntos'
+        adjuntos_files = self._resolve_file_list(None, report_data=report_data, target_type="Certificado Calibración")
+        for f in adjuntos_files:
+            if f not in seen:
+                seen.add(f)
+                files.append(f)
 
         return files
 
-    def _resolve_file_list(self, raw_value) -> list:
+    def _resolve_file_list(self, raw_value, report_data: Optional[Dict] = None, target_type: Optional[str] = None) -> list:
         """Normaliza un conjunto arbitrario de rutas de archivo provenientes del informe."""
 
         resolved = []
-        if not raw_value:
-            return resolved
+        
+        # 1. Procesar valor crudo
+        if raw_value:
+            candidates = raw_value if isinstance(raw_value, list) else [raw_value]
+            for item in candidates:
+                if not item:
+                    continue
+                candidate = str(item).strip()
+                # SEGURIDAD: Evitar anexar reportes previos
+                if os.path.basename(candidate).startswith("Informe_"):
+                    continue
+                path = self._resolve_path(candidate)
+                if path and os.path.exists(path) and path not in resolved:
+                    resolved.append(path)
+        
+        # 2. Procesar de la lista unificada 'adjuntos'
+        if report_data and target_type:
+            adjuntos = report_data.get("adjuntos", [])
+            if isinstance(adjuntos, list):
+                for a in adjuntos:
+                    if isinstance(a, dict) and a.get("tipo") == target_type:
+                        path_candidate = a.get("path")
+                        if not path_candidate:
+                            name = a.get("name")
+                            if name:
+                                path_candidate = f"data/attachments/report_adjuntos/{name}"
+                        
+                        if path_candidate:
+                            path = self._resolve_path(path_candidate)
+                            if path and os.path.exists(path) and path not in resolved:
+                                resolved.append(path)
 
-        candidates = raw_value if isinstance(raw_value, list) else [raw_value]
-        for item in candidates:
-            if not item:
-                continue
-            candidate = str(item).strip()
-            if candidate and os.path.exists(candidate) and candidate not in resolved:
-                resolved.append(candidate)
         return resolved
+
+    def _resolve_path(self, path: str) -> str:
+        """Resuelve una ruta relativa a absoluta usando CAIT_DATA_ROOT si es necesario."""
+        if not path:
+            return ""
+        
+        # Si ya existe tal cual, genial
+        if os.path.exists(path):
+            return str(Path(path).resolve())
+            
+        # Intentar resolver relativo a CAIT_DATA_ROOT (especialmente si empieza con data/)
+        data_root = os.environ.get("CAIT_DATA_ROOT")
+        if data_root:
+            clean_path = path
+            if path.startswith("data/"):
+                clean_path = path[5:]
+            elif path.startswith("data\\"):
+                clean_path = path[5:]
+            
+            full_path = os.path.join(data_root, clean_path)
+            if os.path.exists(full_path):
+                return str(Path(full_path).resolve())
+        
+        return path
 
     def _append_supporting_pdfs(
         self,
@@ -2489,16 +2703,52 @@ class PDFGenerator:
         return {"name": name, "details": details}
 
     def _compute_results_stats(self, dataset_key: str, entries: list) -> Dict[str, int]:
-        """Cuenta ocurrencias por tipo de resultado para el esquema indicado."""
+        """Cuenta ocurrencias agrupando por tipo de resultado simplificado."""
 
         scheme = RESULT_SCHEMES.get(dataset_key, RESULT_SCHEMES["audiometria"])
+        # Inicializar contadores de llaves base del esquema
         stats = {option["key"]: 0 for option in scheme.get("options", [])}
+        
+        # Para audiometría, también prepararemos contadores de grupo para el cuadro
+        group_counts = {"normal": 0, "unilateral": 0, "bilateral": 0}
+        
         for entry in entries:
             key = self._resolve_result_code(entry, dataset_key)
-            if key not in stats:
-                stats[key] = 0
-            stats[key] += 1
-        stats["total"] = sum(stats.values())
+            
+            # Incrementar contador individual
+            if key in stats:
+                stats[key] += 1
+            else:
+                stats[key] = 1
+                
+            # Mapear a grupo para audiometría
+            if dataset_key == "audiometria":
+                # 1. Intentar por llave exacta en el esquema
+                found_group = None
+                for opt in scheme.get("options", []):
+                    if opt["key"] == key:
+                        found_group = opt.get("chart_group")
+                        break
+                
+                # 2. Si no se halló (llave personalizada o manual), usar detección por texto del resultado
+                if not found_group:
+                    res_text = self._normalize_text(str(entry.get("result") or ""))
+                    if "bilateral" in res_text or "bilat" in res_text:
+                        found_group = "bilateral"
+                    elif "unilateral" in res_text or "uni" in res_text:
+                        found_group = "unilateral"
+                    else:
+                        found_group = "normal"
+                
+                group_counts[found_group] += 1
+        
+        # Guardar grupos en el dict de stats para fácil acceso
+        if dataset_key == "audiometria":
+            stats["_group_normal"] = group_counts["normal"]
+            stats["_group_unilateral"] = group_counts["unilateral"]
+            stats["_group_bilateral"] = group_counts["bilateral"]
+
+        stats["total"] = len(entries)
         return stats
 
     def _build_results_analysis_text(self, dataset_key: str, stats: Dict[str, int]) -> str:
@@ -2514,24 +2764,23 @@ class PDFGenerator:
             return (sum(stats.get(key, 0) for key in keys) / total) * 100 if total else 0.0
 
         if dataset_key == "espirometria":
-            normal_pct = pct_for("espiro_normal")
+            # Para espirometría, intentar mapear llaves comunes o usar las del esquema
+            scheme = RESULT_SCHEMES.get("espirometria", {})
+            normal_pct = pct_for(["espiro_normal", "normal"])
             leves_pct = pct_for(["restriccion_leve", "obstruccion_leve", "obstruccion_restriccion_leve"])
             moderadas_pct = pct_for(["restriccion_moderada", "obstruccion_moderada"])
-            grave_pct = pct_for("restriccion_grave")
+            grave_pct = pct_for(["restriccion_grave", "grave"])
             return (
                 f"Del total de espirometrías aplicadas, el {normal_pct:.0f}% se mantiene dentro de parámetros normales, "
                 f"el {leves_pct:.0f}% presenta restricciones u obstrucciones leves, "
                 f"el {moderadas_pct:.0f}% evidencia compromiso moderado y el {grave_pct:.0f}% corresponde a casos graves."
             )
 
-        scheme = RESULT_SCHEMES.get(dataset_key, RESULT_SCHEMES["audiometria"])
-        normal_keys = [opt["key"] for opt in scheme.get("options", []) if opt.get("chart_group") == "normal"]
-        unilateral_keys = [opt["key"] for opt in scheme.get("options", []) if opt.get("chart_group") == "unilateral"]
-        bilateral_keys = [opt["key"] for opt in scheme.get("options", []) if opt.get("chart_group") == "bilateral"]
-
-        normal_pct = pct_for(normal_keys)
-        unilateral_pct = pct_for(unilateral_keys)
-        bilateral_pct = pct_for(bilateral_keys)
+        # Audiometría: Usar los grupos consolidados que creamos en _compute_results_stats
+        normal_pct = (stats.get("_group_normal", 0) / total) * 100
+        unilateral_pct = (stats.get("_group_unilateral", 0) / total) * 100
+        bilateral_pct = (stats.get("_group_bilateral", 0) / total) * 100
+        
         return (
             f"En base a los colaboradores evaluados, el {normal_pct:.0f}% presenta respuestas dentro de los límites normales, "
             f"el {unilateral_pct:.0f}% requiere vigilancia auditiva por caída unilateral y el {bilateral_pct:.0f}% presenta caída bilateral."
@@ -2567,12 +2816,13 @@ class PDFGenerator:
                 ("bilateral",  "BILATERAL",  "#C62828"),  # rojo oscuro
             ]
             data_labels, data_values, palette = [], [], []
+            group_config = [
+                ("normal",     "NORMAL",     "#2E7D32"),
+                ("unilateral", "UNILATERAL", "#F57C00"),
+                ("bilateral",  "BILATERAL",  "#C62828"),
+            ]
             for grp, label, color in group_config:
-                count = sum(
-                    stats.get(opt["key"], 0)
-                    for opt in scheme.get("options", [])
-                    if opt.get("chart_group") == grp
-                )
+                count = stats.get(f"_group_{grp}", 0)
                 if count > 0:
                     data_labels.append(label)
                     data_values.append(count)
@@ -2673,7 +2923,6 @@ class PDFGenerator:
 
     def _resolve_result_code(self, entry: Dict, dataset_key: str = "audiometria") -> str:
         """Normaliza un registro para ubicarlo dentro del esquema solicitado."""
-
         scheme = RESULT_SCHEMES.get(dataset_key, RESULT_SCHEMES["audiometria"])
         valid_keys = {opt["key"] for opt in scheme.get("options", [])}
 
@@ -2699,10 +2948,22 @@ class PDFGenerator:
                     return key
             return "espiro_normal"
 
-        if "caida" in normalized and "bilateral" in normalized:
-            return "caida_bilateral"
-        if "caida" in normalized and "uni" in normalized:
-            return "caida_unilateral"
+        if dataset_key == "audiometria":
+            # Priorizar detección de Bilateral/Unilateral si no es explícitamente normal
+            if "normal" in normalized and "bilateral" in normalized:
+                return "normal"
+                
+            if "bilateral" in normalized or "bilat" in normalized:
+                return "caida_bilateral"
+            if "unilateral" in normalized or "uni" in normalized:
+                return "caida_unilateral"
+            
+            # Si contiene palabras de alerta pero no indica lado
+            if "caida" in normalized or "hipoacusia" in normalized or "alterado" in normalized:
+                return "caida_bilateral" # Default seguro
+                
+            return "normal"
+        
         return "normal"
 
     @staticmethod

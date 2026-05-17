@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html class="light" lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Adjuntos y Certificados – CAIT Informes</title>
+<script src="/static/js/tailwind.js?plugins=forms,container-queries"></script>
+<!-- Offline Fonts Enabled -->
+<!-- Offline Fonts Enabled -->
+<script src="/static/js/ui-components.js"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode:"class",
+    theme:{extend:{
+      colors:{
+        "background":"#fcf9f8","surface":"#fcf9f8",
+        "surface-container-lowest":"#ffffff","surface-container-low":"#f6f3f2",
+        "surface-container":"#f0eded","surface-container-high":"#eae7e7",
+        "on-surface":"#1b1c1c","on-surface-variant":"#41493e",
+        "outline":"#717a6d","outline-variant":"#c0c9bb",
+        "primary":"#00450d","on-primary":"#ffffff","primary-container":"#1b5e20","on-primary-container":"#90d689",
+        "secondary":"#1b6d24","on-secondary":"#ffffff","secondary-container":"#a0f399",
+        "error":"#ba1a1a","on-error":"#ffffff","error-container":"#ffdad6"
+      },
+      spacing:{"xs":"4px","sm":"8px","md":"16px","lg":"24px","xl":"32px","margin":"24px","gutter":"16px"},
+      borderRadius:{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},
+      fontFamily:{"sans":["Inter","sans-serif"]},
+      fontSize:{
+        "headline-lg":["30px",{lineHeight:"38px",letterSpacing:"-0.02em",fontWeight:"700"}],
+        "headline-sm":["20px",{lineHeight:"28px",fontWeight:"600"}],
+        "body-md":["14px",{lineHeight:"20px",fontWeight:"400"}],
+        "body-sm":["12px",{lineHeight:"16px",fontWeight:"400"}],
+        "label-bold":["12px",{lineHeight:"16px",letterSpacing:"0.05em",fontWeight:"700"}]
+      }
+    }}
+  }
+</script>
+<style>
+  *{font-family:'Inter',sans-serif;box-sizing:border-box;}
+  .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block;line-height:1;vertical-align:middle;}
+  .nav-active{background-color:#eae7e7;color:#00450d;font-weight:700;}
+  .nav-item{color:#41493e;}
+  .toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;transition:opacity .3s;opacity:0;}
+  .toast.show{opacity:1;}
+  .toast.success{background:#1b5e20;color:#fff;}
+  .toast.error{background:#ba1a1a;color:#fff;}
+  .drop-zone{border:2px dashed #c0c9bb;border-radius:12px;padding:32px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;}
+  .drop-zone:hover{border-color:#00450d;background:#f6fef7;}
+  .drop-zone.drag-over{border-color:#00450d;background:#e8f5e9;}
+</style>
+<link rel="stylesheet" href="/static/js/offline-fonts.css">
+</head>
+<body class="bg-background text-on-surface" style="display:flex;flex-direction:column;height:100vh;overflow:hidden;">
+
+<!-- ====== TOP APP BAR (IDÉNTICO EN TODAS LAS PÁGINAS) ====== -->
+<header id="header-container"></header>
+
+<!-- ====== BODY ROW ====== -->
+<div style="display:flex;flex:1;overflow:hidden;">
+
+  <!-- === SIDEBAR (IDÉNTICO EN TODAS LAS PÁGINAS) === -->
+  <aside id="sidebar-container" style="width:256px;" class="hidden md:flex flex-col bg-surface-container-low border-r border-outline-variant py-4 overflow-y-auto shrink-0"></aside>
+
+  <!-- === MAIN CONTENT === -->
+  <main style="flex:1;overflow-y:auto;" class="bg-background p-lg">
+    <div class="max-w-5xl mx-auto">
+
+      <div class="mb-8 border-l-4 border-primary pl-5 py-1">
+        <h1 class="text-headline-lg text-on-surface">Adjuntos y Certificados</h1>
+        <p class="text-on-surface-variant text-body-md mt-1">Gestione los certificados de calibración y documentos de idoneidad del equipo técnico.</p>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Columna izquierda: zonas de carga -->
+        <div class="lg:col-span-5 flex flex-col gap-6">
+
+          <!-- Imagen de Protocolo / Resultados PDF -->
+          <div class="bg-surface border border-outline-variant rounded-xl overflow-hidden">
+            <div class="p-4 border-b border-outline-variant bg-surface-container-low flex items-center gap-2">
+              <span class="material-symbols-outlined text-primary" style="font-size:20px;">history_edu</span>
+              <h2 class="text-xs font-bold text-on-surface uppercase tracking-wider">Protocolo de Resultados (PDF)</h2>
+            </div>
+            <div class="p-5">
+              <div class="drop-zone" id="drop-protocolo" onclick="document.getElementById('file-protocolo').click()">
+                <span class="material-symbols-outlined text-outline mb-2" style="font-size:36px;">picture_as_pdf</span>
+                <p class="font-bold text-sm text-on-surface">Subir PDF de Protocolo</p>
+                <p class="text-xs text-outline mt-1">Este archivo se incluirá con los resultados</p>
+              </div>
+              <input type="file" id="file-protocolo" accept=".pdf" class="hidden"/>
+              <div id="list-protocolo" class="mt-3 flex flex-col gap-2"></div>
+            </div>
+          </div>
+
+          <!-- Certificados de calibración -->
+          <div class="bg-surface border border-outline-variant rounded-xl overflow-hidden">
+            <div class="p-4 border-b border-outline-variant bg-surface-container-low flex items-center gap-2">
+              <span class="material-symbols-outlined text-primary" style="font-size:20px;">precision_manufacturing</span>
+              <h2 class="text-xs font-bold text-on-surface uppercase tracking-wider">Certificados de Calibración</h2>
+            </div>
+            <div class="p-5">
+              <div class="drop-zone" id="drop-calibracion" onclick="document.getElementById('file-calibracion').click()">
+                <span class="material-symbols-outlined text-outline mb-2" style="font-size:36px;">upload_file</span>
+                <p class="font-bold text-sm text-on-surface">Subir certificado</p>
+                <p class="text-xs text-outline mt-1">PDF, JPG o PNG · máx. 10 MB</p>
+              </div>
+              <input type="file" id="file-calibracion" accept=".pdf,.jpg,.jpeg,.png" multiple class="hidden"/>
+              <div id="list-calibracion" class="mt-3 flex flex-col gap-2"></div>
+            </div>
+          </div>
+
+          <!-- Listados de asistencia -->
+          <div class="bg-surface border border-outline-variant rounded-xl overflow-hidden">
+            <div class="p-4 border-b border-outline-variant bg-surface-container-low flex items-center gap-2">
+              <span class="material-symbols-outlined text-primary" style="font-size:20px;">checklist</span>
+              <h2 class="text-xs font-bold text-on-surface uppercase tracking-wider">Listados de Asistencia</h2>
+            </div>
+            <div class="p-5">
+              <div class="drop-zone" id="drop-asistencia" onclick="document.getElementById('file-asistencia').click()">
+                <span class="material-symbols-outlined text-outline mb-2" style="font-size:36px;">list_alt</span>
+                <p class="font-bold text-sm text-on-surface">Subir listado</p>
+                <p class="text-xs text-outline mt-1">Solo PDF · máx. 10 MB por archivo</p>
+              </div>
+              <input type="file" id="file-asistencia" accept=".pdf" multiple class="hidden"/>
+              <div id="list-asistencia" class="mt-3 flex flex-col gap-2"></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Columna derecha: tabla de archivos -->
+        <div class="lg:col-span-7">
+          <div class="bg-surface border border-outline-variant rounded-xl overflow-hidden h-full flex flex-col">
+            <div class="p-4 border-b border-outline-variant bg-surface-container-low flex items-center justify-between">
+              <h2 class="text-xs font-bold text-on-surface uppercase tracking-wider">Archivos Adjuntados</h2>
+              <span id="file-count" class="text-xs text-outline">0 archivos</span>
+            </div>
+            <div class="flex-1 overflow-y-auto">
+              <table class="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr class="bg-surface-container-low border-b border-outline-variant">
+                    <th class="px-4 py-3 font-bold text-outline uppercase">Archivo</th>
+                    <th class="px-4 py-3 font-bold text-outline uppercase hidden sm:table-cell">Tipo</th>
+                    <th class="px-4 py-3 font-bold text-outline uppercase text-right">Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="files-tbody" class="divide-y divide-outline-variant">
+                  <tr id="empty-files-row">
+                    <td colspan="3" class="px-4 py-10 text-center text-outline text-sm">No hay archivos adjuntados aún.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  // Estado de archivos en memoria (nombre + tipo, no el binario)
+  let adjuntos = []; // {name, tipo}
+
+  function showToast(msg, type='success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.className = `toast ${type} show`;
+    setTimeout(()=>t.classList.remove('show'), 2800);
+  }
+
+  function renderFilesTable() {
+    const tbody = document.getElementById('files-tbody');
+    const empty = document.getElementById('empty-files-row');
+    tbody.querySelectorAll('tr:not(#empty-files-row)').forEach(r=>r.remove());
+
+    document.getElementById('file-count').textContent = adjuntos.length + ' archivo' + (adjuntos.length !== 1 ? 's' : '');
+
+    if (adjuntos.length === 0) {
+      empty.style.display = '';
+    } else {
+      empty.style.display = 'none';
+      adjuntos.forEach((f, i) => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-surface-container-low transition-colors';
+        tr.innerHTML = `
+          <td class="px-4 py-3">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-primary" style="font-size:18px;">description</span>
+              <span class="font-medium text-on-surface truncate max-w-[200px]">${f.name}</span>
+            </div>
+          </td>
+          <td class="px-4 py-3 text-on-surface-variant hidden sm:table-cell">${f.tipo}</td>
+          <td class="px-4 py-3 text-right">
+            <button class="text-error text-xs font-bold hover:underline" onclick="removeFile(${i})">Quitar</button>
+          </td>`;
+        tbody.appendChild(tr);
+      });
+    }
+  }
+
+  function removeFile(i) {
+    adjuntos.splice(i, 1);
+    renderFilesTable();
+    autoSave();
+  }
+
+  function handleFiles(files, tipo) {
+    Array.from(files).forEach(f => {
+      if (!adjuntos.find(a => a.name === f.name)) {
+        adjuntos.push({ name: f.name, tipo });
+      }
+    });
+    renderFilesTable();
+    autoSave();
+  }
+
+  // Drag & drop
+  ['calibracion','asistencia','protocolo'].forEach(key => {
+    const zone = document.getElementById(`drop-${key}`);
+    const tipo = key === 'calibracion' ? 'Certificado Calibración' : 
+                 key === 'asistencia' ? 'Listado Asistencia' : 'Protocolo Resultados';
+    if (!zone) return;
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault(); zone.classList.remove('drag-over');
+      handleFiles(e.dataTransfer.files, tipo);
+    });
+    const input = document.getElementById(`file-${key}`);
+    if (input) {
+      input.addEventListener('change', e => {
+        handleFiles(e.target.files, tipo);
+        e.target.value = '';
+      });
+    }
+  });
+
+  async function autoSave() {
+    try {
+      const existing = await (await fetch('/api/report')).json().catch(()=>({})) || {};
+      existing.adjuntos = adjuntos;
+      await fetch('/api/report', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(existing)
+      });
+    } catch(e) { console.error('autoSave error', e); }
+  }
+
+  async function loadData() {
+    try {
+      const res = await fetch('/api/report');
+      if (!res.ok) return;
+      const report = await res.json();
+      if (Array.isArray(report.adjuntos)) {
+        adjuntos = report.adjuntos;
+        renderFilesTable();
+      }
+    } catch(e) { console.error('loadData error', e); }
+  }
+
+  window.saveReport = autoSave;
+  window.loadData = loadData;
+  window.addEventListener('DOMContentLoaded', loadData);
+</script>
+</body></html>

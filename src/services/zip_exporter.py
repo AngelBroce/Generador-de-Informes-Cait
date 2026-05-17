@@ -17,53 +17,53 @@ class ZipExporter:
         pass
     
     def create_package(self, report_name: str, pdf_path: str, 
-                      attachments: List[str], output_dir: str) -> str:
+                      attachments: dict, output_dir: str) -> str:
         """
-        Crea un paquete ZIP con el informe y anexos
+        Crea un paquete ZIP con el informe y anexos organizados por carpetas
         
         Args:
             report_name: Nombre del informe
             pdf_path: Ruta del PDF principal
-            attachments: Lista de rutas de archivos adjuntos
+            attachments: Diccionario { 'Carpeta': [lista_de_rutas] }
             output_dir: Directorio de salida
-            
-        Returns:
-            Ruta del archivo ZIP creado
         """
         try:
+            import shutil
             # Crear carpeta temporal
-            temp_dir = os.path.join(output_dir, report_name)
-            os.makedirs(temp_dir, exist_ok=True)
+            temp_root = os.path.join(output_dir, report_name)
+            if os.path.exists(temp_root):
+                shutil.rmtree(temp_root)
+            os.makedirs(temp_root, exist_ok=True)
             
-            # Copiar PDF principal
+            # 1. Copiar PDF principal
             if os.path.exists(pdf_path):
-                import shutil
-                shutil.copy(pdf_path, os.path.join(temp_dir, os.path.basename(pdf_path)))
+                shutil.copy2(pdf_path, os.path.join(temp_root, os.path.basename(pdf_path)))
             
-            # Crear carpeta de anexos
-            if attachments:
-                attachments_dir = os.path.join(temp_dir, "Anexos")
-                os.makedirs(attachments_dir, exist_ok=True)
+            # 2. Copiar anexos categorizados
+            adjuntos_root = os.path.join(temp_root, "Adjuntos")
+            os.makedirs(adjuntos_root, exist_ok=True)
+            
+            for category, files in attachments.items():
+                if not files: continue
+                cat_dir = os.path.join(adjuntos_root, category)
+                os.makedirs(cat_dir, exist_ok=True)
                 
-                for attachment in attachments:
-                    if os.path.exists(attachment):
-                        import shutil
-                        shutil.copy(attachment, attachments_dir)
+                for f_path in files:
+                    if f_path and os.path.exists(f_path):
+                        shutil.copy2(f_path, cat_dir)
             
-            # Crear ZIP
+            # 3. Crear ZIP
             zip_path = os.path.join(output_dir, f"{report_name}.zip")
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                for root, dirs, files in os.walk(temp_dir):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, output_dir)
-                        zipf.write(file_path, arcname)
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+                
+            shutil.make_archive(os.path.join(output_dir, report_name), 'zip', 
+                               root_dir=output_dir, base_dir=report_name)
             
             # Limpiar carpeta temporal
-            import shutil
-            shutil.rmtree(temp_dir)
+            shutil.rmtree(temp_root)
             
-            return zip_path
+            return f"{zip_path}"
             
         except Exception as e:
             print(f"Error al crear paquete ZIP: {e}")

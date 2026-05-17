@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html class="light" lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Gestionar Contrapartes – CAIT Informes</title>
+<script src="/static/js/tailwind.js?plugins=forms,container-queries"></script>
+<!-- Offline Fonts Enabled -->
+<!-- Offline Fonts Enabled -->
+<script id="tailwind-config">
+  tailwind.config = {
+    theme:{extend:{
+      colors:{
+        "background":"#fcf9f8","surface":"#fcf9f8",
+        "surface-container-low":"#f6f3f2","on-surface":"#1b1c1c","on-surface-variant":"#41493e",
+        "outline":"#717a6d","outline-variant":"#c0c9bb",
+        "primary":"#00450d","on-primary":"#ffffff","error":"#ba1a1a"
+      },
+      borderRadius:{"DEFAULT":"0.25rem","lg":"0.5rem"}
+    }}
+  }
+</script>
+<style>
+  *{font-family:'Inter',sans-serif;box-sizing:border-box;}
+  .toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;transition:opacity .3s;opacity:0;}
+  .toast.show{opacity:1;}
+  .toast.success{background:#1b5e20;color:#fff;}
+  .toast.error{background:#ba1a1a;color:#fff;}
+</style>
+<link rel="stylesheet" href="/static/js/offline-fonts.css">
+</head>
+<body class="bg-background text-on-surface flex flex-col h-screen overflow-hidden">
+
+<header class="h-[64px] flex items-center justify-between px-6 bg-surface border-b border-outline-variant shrink-0">
+  <div class="flex items-center gap-3 text-primary font-bold text-lg cursor-pointer" onclick="location.href='/'">
+    <img src="/static/logo.png" alt="Logo CAIT" class="h-10 w-auto"/>
+    Generador de Informes CAIT
+  </div>
+  <button onclick="history.back()" class="flex items-center gap-1 px-4 py-2 text-sm font-bold text-outline border border-outline-variant rounded-lg hover:bg-surface-container-low transition-colors">
+    <span class="material-symbols-outlined" style="font-size:18px;">arrow_back</span> Volver
+  </button>
+</header>
+
+<main class="flex-1 overflow-y-auto p-6">
+  <div class="max-w-4xl mx-auto">
+    <div class="mb-8">
+      <h1 class="text-3xl font-bold text-on-surface">Gestión de Contrapartes</h1>
+      <p class="text-on-surface-variant text-sm">Administre los contactos técnicos de las empresas.</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+      <!-- Formulario -->
+      <div class="md:col-span-5 bg-surface border border-outline-variant rounded-xl p-5 h-fit">
+        <h2 class="font-bold mb-4 flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary">contact_mail</span>
+          Nueva Contraparte
+        </h2>
+        <div class="space-y-4">
+          <div>
+            <label class="text-xs font-bold text-outline uppercase block mb-1">Nombre Completo</label>
+            <input id="cp-name" type="text" class="w-full h-10 px-3 border border-outline-variant rounded-lg bg-surface-container-low outline-none focus:ring-2 focus:ring-primary"/>
+          </div>
+          <div>
+            <label class="text-xs font-bold text-outline uppercase block mb-1">Cargo / Empresa</label>
+            <input id="cp-role" type="text" placeholder="Ej: Jefe de Seguridad - Coca Cola" class="w-full h-10 px-3 border border-outline-variant rounded-lg bg-surface-container-low outline-none focus:ring-2 focus:ring-primary"/>
+          </div>
+          <button id="btn-add-cp" class="w-full py-2 bg-primary text-on-primary font-bold rounded-lg hover:opacity-90">Guardar Contacto</button>
+        </div>
+      </div>
+
+      <!-- Tabla -->
+      <div class="md:col-span-7 bg-surface border border-outline-variant rounded-xl overflow-hidden">
+        <table class="w-full text-left text-sm border-collapse">
+          <thead>
+            <tr class="bg-surface-container-low border-b border-outline-variant">
+              <th class="px-4 py-3 font-bold text-outline uppercase">Nombre</th>
+              <th class="px-4 py-3 font-bold text-outline uppercase">Cargo</th>
+              <th class="px-4 py-3 font-bold text-outline uppercase text-right">Acción</th>
+            </tr>
+          </thead>
+          <tbody id="cp-list" class="divide-y divide-outline-variant">
+            <!-- dinámico -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  function showToast(msg, type='success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.className = `toast ${type} show`;
+    setTimeout(() => t.classList.remove('show'), 2800);
+  }
+
+  async function loadCounterparts() {
+    const res = await fetch('/api/counterparts');
+    const data = await res.json();
+    const tbody = document.getElementById('cp-list');
+    tbody.innerHTML = '';
+    data.forEach(cp => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="px-4 py-3 font-bold">${cp.name}</td>
+        <td class="px-4 py-3 text-on-surface-variant text-xs">${cp.role || '—'}</td>
+        <td class="px-4 py-3 text-right">
+          <button onclick="removeCp('${cp.id || cp.name}')" class="text-error font-bold text-xs hover:underline">Eliminar</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function addCounterpart() {
+    const name = document.getElementById('cp-name').value.trim();
+    const role = document.getElementById('cp-role').value.trim();
+    if (!name) return showToast('El nombre es obligatorio','error');
+
+    const payload = { name, role };
+    const res = await fetch('/api/counterparts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      showToast('Contraparte guardada ✓');
+      document.getElementById('cp-name').value = '';
+      document.getElementById('cp-role').value = '';
+      loadCounterparts();
+    }
+  }
+
+  async function removeCp(id) {
+    if (!confirm('¿Seguro que desea eliminar este contacto?')) return;
+    const res = await fetch(`/api/counterparts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (res.ok) { showToast('Contacto eliminado'); loadCounterparts(); }
+  }
+
+  document.getElementById('btn-add-cp').addEventListener('click', addCounterpart);
+  window.addEventListener('DOMContentLoaded', loadCounterparts);
+</script>
+</body>
+</html>

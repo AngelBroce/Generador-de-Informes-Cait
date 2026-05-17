@@ -1,0 +1,22 @@
+/* Fuentes locales para modo Offline */
+@font-face {
+    font-family: 'Inter';
+    src: url('/static/js/inter.woff2') format('woff2');
+    font-weight: 100 900;
+    font-display: swap;
+    font-style: normal;
+}
+@font-face {
+    font-family: 'Material Icons';
+    src: url('/static/js/MaterialIcons-Regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+body { font-family: 'Inter', sans-serif !important; }
+.material-symbols-outlined, .material-icons {
+    font-family: 'Material Icons' !important;
+    font-weight: normal; font-style: normal; font-size: 24px;
+    line-height: 1; letter-spacing: normal; text-transform: none;
+    display: inline-block; white-space: nowrap; word-wrap: normal;
+    direction: ltr; -webkit-font-smoothing: antialiased;
+}

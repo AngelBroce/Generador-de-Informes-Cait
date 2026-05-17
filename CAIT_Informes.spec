@@ -1,19 +1,24 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('src/assets', 'src/assets'), ('logo-apli-removebg-preview.ico', '.'), ('data', 'data')]
+datas = [
+    ('src/assets', 'src/assets'), 
+    ('logo-apli-removebg-preview.ico', '.'), 
+    ('static', 'static'),
+    ('frontend', 'frontend'),
+    ('imagenes de protocolo', 'imagenes de protocolo')
+]
 binaries = []
-hiddenimports = ['tkcalendar', 'babel.numbers', 'babel.dates']
-tmp_ret = collect_all('tkcalendar')
+hiddenimports = ['fastapi', 'uvicorn', 'webview', 'jinja2', 'starlette', 'pydantic', 'anyio']
+tmp_ret = collect_all('fastapi')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('babel')
+tmp_ret = collect_all('uvicorn')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('customtkinter')
+tmp_ret = collect_all('webview')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-
 
 a = Analysis(
-    ['src\\ui\\app.py'],
+    ['api_main.py'],
     pathex=[],
     binaries=binaries,
     datas=datas,

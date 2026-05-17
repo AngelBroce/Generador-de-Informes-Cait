@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html class="light" lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Datos de la Empresa – CAIT Informes</title>
+<script src="/static/js/tailwind.js?plugins=forms,container-queries"></script>
+<!-- Offline Fonts Enabled -->
+<!-- Offline Fonts Enabled -->
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode:"class",
+    theme:{extend:{
+      colors:{
+        "background":"#fcf9f8","surface":"#fcf9f8",
+        "surface-container-low":"#f6f3f2","on-surface":"#1b1c1c","on-surface-variant":"#41493e",
+        "outline":"#717a6d","outline-variant":"#c0c9bb",
+        "primary":"#00450d","on-primary":"#ffffff","secondary":"#1b6d24","on-secondary":"#ffffff"
+      },
+      spacing:{"lg":"24px"},
+      borderRadius:{"DEFAULT":"0.25rem","lg":"0.5rem"},
+      fontFamily:{"sans":["Inter","sans-serif"]},
+      fontSize:{"headline-lg":["30px",{lineHeight:"38px",fontWeight:"700"}],"body-md":["14px",{lineHeight:"20px"}]}
+    }}
+  }
+</script>
+<style>
+  *{font-family:'Inter',sans-serif;box-sizing:border-box;}
+  .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block;line-height:1;vertical-align:middle;}
+  .nav-active{background-color:#eae7e7;color:#00450d;font-weight:700;}
+  .nav-item{color:#41493e;}
+  .toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;transition:opacity .3s;opacity:0;}
+  .toast.show{opacity:1;}
+  .toast.success{background:#1b5e20;color:#fff;}
+</style>
+<link rel="stylesheet" href="/static/js/offline-fonts.css">
+</head>
+<body class="bg-background text-on-surface flex flex-col h-screen overflow-hidden">
+
+<header class="h-16 flex items-center justify-between px-lg bg-surface border-b border-outline-variant shrink-0">
+  <div class="flex items-center gap-3 text-primary font-bold text-lg cursor-pointer" onclick="location.href='/'">
+    <img src="/static/logo.png" alt="Logo CAIT" class="h-10 w-auto"/>
+    Generador de Informes CAIT
+  </div>
+  <div class="flex items-center gap-3">
+    <button id="btn-save" class="flex items-center gap-1 px-4 py-2 text-sm font-bold text-on-primary bg-primary rounded-lg hover:opacity-90 transition-opacity">
+      <span class="material-symbols-outlined" style="font-size:18px;">save</span> Guardar Borrador
+    </button>
+  </div>
+</header>
+
+<div class="flex flex-1 overflow-hidden">
+  <aside style="width:256px;" class="hidden md:flex flex-col bg-surface-container-low border-r border-outline-variant py-4 overflow-y-auto shrink-0">
+    <div class="px-6 mb-8">
+      <h2 class="text-primary font-bold text-lg leading-tight">CAIT Panamá</h2>
+      <p class="text-on-surface-variant text-sm">Generador de Informes</p>
+    </div>
+    <nav class="flex-1 px-2 space-y-1">
+      <a href="/presentacion/index.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-surface-container-high transition-colors">
+        <span class="material-symbols-outlined">description</span><span>Presentación del informe</span>
+      </a>
+      <a href="/presentacion/contenido.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-surface-container-high transition-colors">
+        <span class="material-symbols-outlined">article</span><span>Contenido del informe</span>
+      </a>
+      <a href="/presentacion/empresa.html" class="nav-active nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors">
+        <span class="material-symbols-outlined">corporate_fare</span><span>Datos de la Empresa</span>
+      </a>
+      <a href="/resultados/" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-surface-container-high transition-colors">
+        <span class="material-symbols-outlined">science</span><span>Resultados de las pruebas</span>
+      </a>
+      <a href="/conclusiones/" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-surface-container-high transition-colors">
+        <span class="material-symbols-outlined">summarize</span><span>Conclusión</span>
+      </a>
+      <a href="/conclusiones/recomendaciones.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-surface-container-high transition-colors">
+        <span class="material-symbols-outlined">format_list_bulleted</span><span>Recomendaciones</span>
+      </a>
+      <a href="/certificados/calibracion.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-surface-container-high transition-colors">
+        <span class="material-symbols-outlined">precision_manufacturing</span><span>Certificados de calibración</span>
+      </a>
+      <a href="/certificados/protocolo.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-surface-container-high transition-colors">
+        <span class="material-symbols-outlined">history_edu</span><span>Adjuntos de resultados</span>
+      </a>
+      <a href="/certificados/asistencia.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-surface-container-high transition-colors">
+        <span class="material-symbols-outlined">checklist</span><span>Listados de asistencia</span>
+      </a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 overflow-y-auto p-lg">
+    <div class="max-w-5xl mx-auto">
+      <div class="mb-8 border-l-4 border-primary pl-5 py-1">
+        <h1 class="text-headline-lg">Datos de la Empresa</h1>
+        <p class="text-on-surface-variant text-body-md mt-1">Información corporativa y técnica de la sede evaluada.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+        <div class="md:col-span-7 bg-surface border border-outline-variant rounded-xl overflow-hidden">
+          <div class="p-5 border-b border-outline-variant bg-surface-container-low flex items-center gap-2">
+             <span class="material-symbols-outlined text-primary">corporate_fare</span>
+             <h2 class="font-bold">Información Corporativa</h2>
+          </div>
+          <div class="p-6 flex flex-col gap-6">
+            
+            <div class="flex flex-col gap-1">
+              <span class="text-xs font-bold text-primary uppercase">Nombre de Empresa *</span>
+              <input id="company-name" type="text" placeholder="Ej: Industrias Panamá S.A." class="h-10 px-3 border border-outline-variant rounded-lg bg-white focus:border-primary focus:ring-2 focus:ring-primary outline-none"/>
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <span class="text-xs font-bold text-primary uppercase">Fechas del estudio:</span>
+              <input id="study-dates" type="text" placeholder="Ej: 10 al 15 de Octubre de 2024" class="h-10 px-3 border border-outline-variant rounded-lg bg-white focus:border-primary focus:ring-2 focus:ring-primary outline-none"/>
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <span class="text-xs font-bold text-primary uppercase">Área evaluada:</span>
+              <input id="location" type="text" placeholder="Ej: Planta de Producción" class="h-10 px-3 border border-outline-variant rounded-lg bg-white focus:border-primary focus:ring-2 focus:ring-primary outline-none"/>
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <span class="text-xs font-bold text-primary uppercase">Actividad principal:</span>
+              <input id="company-activity" type="text" placeholder="Ej: Manufactura de alimentos" class="h-10 px-3 border border-outline-variant rounded-lg bg-white focus:border-primary focus:ring-2 focus:ring-primary outline-none"/>
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <span class="text-xs font-bold text-primary uppercase">País en que se realizó:</span>
+              <input id="country" type="text" value="Panamá" class="h-10 px-3 border border-outline-variant rounded-lg bg-white focus:border-primary focus:ring-2 focus:ring-primary outline-none"/>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="md:col-span-5 flex flex-col gap-6">
+          <div class="bg-secondary-container/30 border border-outline-variant rounded-xl overflow-hidden">
+            <div class="p-4 border-b border-outline-variant bg-surface-container-low flex items-center gap-2">
+              <span class="material-symbols-outlined text-primary">contact_page</span>
+              <h2 class="text-xs font-bold uppercase tracking-wider">Contraparte Técnica</h2>
+            </div>
+            <div class="p-5 flex flex-col gap-4">
+              <div>
+                <span class="text-xs font-bold uppercase block mb-1">Nombre Completo</span>
+                <select id="counterpart-name" class="w-full bg-white border border-outline-variant rounded px-2 py-1.5 text-sm focus:border-primary focus:ring-2 focus:ring-primary outline-none cursor-pointer">
+                  <option value="">Seleccione...</option>
+                </select>
+              </div>
+              <div>
+                <span class="text-xs font-bold uppercase block mb-1">Cargo / Rol</span>
+                <input id="counterpart-role" type="text" placeholder="Ej: Jefe de Salud Ocupacional" class="w-full bg-transparent border-b border-outline focus:border-primary outline-none transition-colors p-1 text-sm"/>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  const FIELD_IDS = ['company-name','study-dates','location','company-activity','country','counterpart-name','counterpart-role'];
+
+  async function autoSave() {
+    const existing = await fetch('/api/report').then(r => r.json()).catch(()=>({}));
+    const data = {};
+    FIELD_IDS.forEach(id => data[id.replace(/-/g, '_')] = document.getElementById(id).value);
+    const merged = { ...existing, ...data };
+    await fetch('/api/report', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(merged) });
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.className = 'toast success show';
+    setTimeout(()=>t.classList.remove('show'), 2800);
+  }
+
+  window.addEventListener('DOMContentLoaded', async () => {
+    const [rptRes, cpRes] = await Promise.all([fetch('/api/report'), fetch('/api/counterparts')]);
+    const report = await rptRes.json().catch(()=>({}));
+    const counterparts = await cpRes.json().catch(()=>[]);
+
+    const cpSel = document.getElementById('counterpart-name');
+    counterparts.forEach(c => cpSel.add(new Option(c.name, c.name)));
+
+    FIELD_IDS.forEach(id => {
+      const key = id.replace(/-/g, '_');
+      if (report[key]) document.getElementById(id).value = report[key];
+      document.getElementById(id).addEventListener('change', autoSave);
+      document.getElementById(id).addEventListener('input', autoSave);
+    });
+  });
+
+  document.getElementById('btn-save').addEventListener('click', () => autoSave().then(()=>showToast('Borrador guardado ✓')));
+</script>
+</body></html>

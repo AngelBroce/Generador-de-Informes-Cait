@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html class="light" lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Presentación – CAIT Informes</title>
+<script src="/static/js/tailwind.js?plugins=forms,container-queries"></script>
+<!-- Offline Fonts Enabled -->
+<!-- Offline Fonts Enabled -->
+<script src="/static/js/ui-components.js"></script>
+<link rel="stylesheet" href="/static/js/flatpickr.min.css">
+<script src="/static/js/flatpickr.js"></script>
+<script src="/static/js/flatpickr_es.js"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode:"class",
+    theme:{extend:{
+      colors:{
+        "background":"#fcf9f8","surface":"#fcf9f8",
+        "surface-container-lowest":"#ffffff","surface-container-low":"#f6f3f2",
+        "surface-container":"#f0eded","surface-container-high":"#eae7e7",
+        "on-surface":"#1b1c1c","on-surface-variant":"#41493e",
+        "outline":"#717a6d","outline-variant":"#c0c9bb",
+        "primary":"#00450d","on-primary":"#ffffff","primary-container":"#1b5e20","on-primary-container":"#90d689",
+        "secondary":"#1b6d24","on-secondary":"#ffffff","secondary-container":"#a0f399","on-secondary-container":"#217128",
+        "error":"#ba1a1a","on-error":"#ffffff"
+      },
+      spacing:{"xs":"4px","sm":"8px","md":"16px","lg":"24px","xl":"32px","margin":"24px","gutter":"16px"},
+      borderRadius:{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},
+      fontFamily:{"sans":["Inter","sans-serif"]},
+      fontSize:{
+        "headline-lg":["30px",{lineHeight:"38px",letterSpacing:"-0.02em",fontWeight:"700"}],
+        "headline-sm":["20px",{lineHeight:"28px",fontWeight:"600"}],
+        "body-md":["14px",{lineHeight:"20px",fontWeight:"400"}],
+        "label-bold":["12px",{lineHeight:"16px",letterSpacing:"0.05em",fontWeight:"700"}]
+      }
+    }}
+  }
+</script>
+<style>
+  *{font-family:'Inter',sans-serif;box-sizing:border-box;}
+  .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block;line-height:1;vertical-align:middle;}
+  .nav-active{background-color:#eae7e7;color:#00450d;font-weight:700;}
+  .nav-item{color:#41493e;}
+  .toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;transition:opacity .3s;opacity:0;}
+  .toast.show{opacity:1;}
+  .toast.success{background:#1b5e20;color:#fff;}
+  .toast.error{background:#ba1a1a;color:#fff;}
+  .save-indicator{position:fixed;bottom:24px;left:24px;font-size:12px;color:#717a6d;opacity:0;transition:opacity .3s;}
+  .save-indicator.show{opacity:1;}
+</style>
+<link rel="stylesheet" href="/static/js/offline-fonts.css">
+</head>
+<body class="bg-background text-on-surface" style="display:flex;flex-direction:column;height:100vh;overflow:hidden;">
+
+<!-- TOP APP BAR -->
+<header id="header-container"></header>
+
+<!-- BODY ROW -->
+<div style="display:flex;flex:1;overflow:hidden;">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar-container" style="width:256px;" class="hidden md:flex flex-col bg-surface-container-low border-r border-outline-variant py-4 overflow-y-auto shrink-0"></aside>
+
+  <!-- MAIN -->
+  <main style="flex:1;overflow-y:auto;" class="bg-background p-lg">
+    <div class="max-w-5xl mx-auto">
+
+      <div class="mb-8 border-l-4 border-primary pl-5 py-1">
+        <h1 class="text-headline-lg text-on-surface">Presentación del Informe</h1>
+        <p class="text-on-surface-variant text-body-md mt-1">Complete los datos generales del informe clínico.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+
+        <!-- Columna izquierda -->
+        <div class="md:col-span-7 bg-surface border border-outline-variant rounded-xl overflow-hidden">
+          <div class="p-5 border-b border-outline-variant bg-surface-container-low">
+            <h2 class="font-bold text-on-surface">Información General</h2>
+          </div>
+          <div class="p-5 flex flex-col gap-6">
+
+            <div class="flex flex-col gap-1">
+              <span class="text-xs font-bold text-primary uppercase">Tipo de Informe *</span>
+              <select id="report-type" class="h-10 px-3 border border-outline-variant rounded-lg bg-white focus:border-primary focus:ring-2 focus:ring-primary outline-none cursor-pointer">
+                <option value="audiometria">Audiometría</option>
+                <option value="espirometria">Espirometría</option>
+                <option value="audiometria_espirometria">Audiometría y Espirometría</option>
+              </select>
+            </div>
+
+            <!-- Toggle de Fechas -->
+            <div class="flex flex-col gap-3">
+              <span class="text-xs font-bold text-primary uppercase">Frecuencia de Evaluación</span>
+              <div class="flex bg-surface-container-high p-1 rounded-lg w-fit">
+                <button id="btn-single-date" class="px-4 py-2 text-sm font-bold rounded-md transition-all bg-primary text-on-primary">Una fecha</button>
+                <button id="btn-multi-date" class="px-4 py-2 text-sm font-bold rounded-md transition-all text-on-surface-variant hover:bg-surface-container">Varias fechas</button>
+              </div>
+            </div>
+
+            <div class="flex flex-col gap-1" id="single-date-container">
+              <span class="text-xs font-bold text-primary uppercase">Fecha de Evaluación *</span>
+              <input id="evaluation-date" type="date" class="h-10 px-3 border border-outline-variant rounded-lg bg-white focus:border-primary focus:ring-2 focus:ring-primary outline-none"/>
+            </div>
+
+            <div class="flex flex-col gap-1 hidden" id="multi-date-container">
+              <span class="text-xs font-bold text-primary uppercase">Fechas de Evaluación (Selección Múltiple) *</span>
+              <input id="evaluation-dates" type="text" placeholder="Seleccione las fechas..." class="h-10 px-3 border border-outline-variant rounded-lg bg-white focus:border-primary focus:ring-2 focus:ring-primary outline-none cursor-pointer"/>
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <span class="text-xs font-bold text-primary uppercase">Evaluador / Responsable Principal *</span>
+              <select id="evaluator-main" class="h-10 px-3 border border-outline-variant rounded-lg bg-white focus:border-primary focus:ring-2 focus:ring-primary outline-none cursor-pointer">
+                <option value="">Seleccione un evaluador...</option>
+              </select>
+            </div>
+
+            <div id="evaluator-audio-container" style="display:none;" class="flex flex-col gap-1">
+              <span class="text-xs font-bold text-primary uppercase">Evaluador de Audiometría *</span>
+              <select id="evaluator-audio" class="h-10 px-3 border border-outline-variant rounded-lg bg-white focus:border-primary focus:ring-2 focus:ring-primary outline-none cursor-pointer">
+                <option value="">Seleccione...</option>
+              </select>
+            </div>
+
+            <div id="evaluator-spiro-container" style="display:none;" class="flex flex-col gap-1">
+              <span class="text-xs font-bold text-primary uppercase">Evaluador de Espirometría *</span>
+              <select id="evaluator-spiro" class="h-10 px-3 border border-outline-variant rounded-lg bg-white focus:border-primary focus:ring-2 focus:ring-primary outline-none cursor-pointer">
+                <option value="">Seleccione...</option>
+              </select>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Columna derecha -->
+        <div class="md:col-span-5 flex flex-col gap-5">
+
+          <div class="bg-surface border border-outline-variant rounded-xl overflow-hidden" id="empresa">
+            <div class="p-4 border-b border-outline-variant bg-surface-container-low flex items-center gap-2">
+              <span class="material-symbols-outlined text-primary" style="font-size:20px;">corporate_fare</span>
+              <h3 class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Datos de la Empresa</h3>
+            </div>
+            <div class="p-5 flex flex-col gap-4">
+              <div>
+                <span class="text-xs font-bold text-on-surface-variant uppercase block mb-1">Nombre de Empresa *</span>
+                <input id="company-name" type="text" placeholder="Ej: Industrias S.A." class="w-full text-base font-bold bg-transparent border-b border-outline focus:border-primary outline-none transition-colors p-1"/>
+              </div>
+
+              <!-- Toggle de Fechas del Estudio -->
+              <div class="flex flex-col gap-3">
+                <span class="text-xs font-bold text-primary uppercase">Fechas del Estudio</span>
+                <div class="flex bg-surface-container-high p-1 rounded-lg w-fit">
+                  <button id="btn-study-single" class="px-3 py-1.5 text-xs font-bold rounded-md transition-all bg-primary text-on-primary">Una fecha</button>
+                  <button id="btn-study-multi" class="px-3 py-1.5 text-xs font-bold rounded-md transition-all text-on-surface-variant hover:bg-surface-container">Varias fechas</button>
+                </div>
+              </div>
+
+              <div id="study-single-container">
+                <span class="text-xs font-bold text-on-surface-variant uppercase block mb-1">Fecha del estudio</span>
+                <input id="study-date" type="date" class="w-full bg-transparent border-b border-outline focus:border-primary outline-none transition-colors p-1 text-sm"/>
+              </div>
+
+              <div id="study-multi-container" class="hidden">
+                <span class="text-xs font-bold text-on-surface-variant uppercase block mb-1">Fechas del estudio (Selección Múltiple)</span>
+                <input id="study-dates-multi" type="text" placeholder="Seleccione fechas..." class="w-full bg-transparent border-b border-outline focus:border-primary outline-none transition-colors p-1 text-sm cursor-pointer"/>
+              </div>
+              <div>
+                <span class="text-xs font-bold text-on-surface-variant uppercase block mb-1">Área evaluada: *</span>
+                <input id="location" type="text" placeholder="Ej: Planta Norte, La Chorrera" class="w-full bg-transparent border-b border-outline focus:border-primary outline-none transition-colors p-1 text-sm"/>
+              </div>
+              <div>
+                <span class="text-xs font-bold text-on-surface-variant uppercase block mb-1">Actividad Principal</span>
+                <input id="company-activity" type="text" placeholder="Ej: Manufactura" class="w-full bg-transparent border-b border-outline focus:border-primary outline-none transition-colors p-1 text-sm"/>
+              </div>
+              <div>
+                <span class="text-xs font-bold text-on-surface-variant uppercase block mb-1">País en que se realizó</span>
+                <input id="country" type="text" value="Panamá, República de Panamá" class="w-full bg-transparent border-b border-outline focus:border-primary outline-none transition-colors p-1 text-sm"/>
+              </div>
+              <div>
+                <span class="text-xs font-bold text-on-surface-variant uppercase block mb-1">Dirección de la empresa</span>
+                <input id="company-address" type="text" placeholder="Ej: Provincia de Panamá Oeste, Capira" class="w-full bg-transparent border-b border-outline focus:border-primary outline-none transition-colors p-1 text-sm"/>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-secondary-container/20 border border-outline-variant rounded-xl overflow-hidden">
+            <div class="p-4 border-b border-outline-variant bg-surface-container-low flex items-center gap-2">
+              <span class="material-symbols-outlined text-primary" style="font-size:20px;">contact_page</span>
+              <h3 class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Contraparte Técnica</h3>
+            </div>
+            <div class="p-5 flex flex-col gap-4">
+              <div>
+                <span class="text-xs font-bold uppercase block mb-1">Nombre Completo</span>
+                <select id="counterpart-name" class="w-full bg-white border border-outline-variant rounded px-2 py-1.5 text-sm focus:border-primary focus:ring-2 focus:ring-primary outline-none cursor-pointer">
+                  <option value="">Seleccione una contraparte...</option>
+                </select>
+              </div>
+              <div>
+                <span class="text-xs font-bold uppercase block mb-1">Cargo / Rol</span>
+                <input id="counterpart-role" type="text" placeholder="Ej: Jefe de Seguridad" class="w-full bg-transparent border-b border-outline focus:border-primary outline-none transition-colors p-1 text-sm"/>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+<div id="save-indicator" class="save-indicator">💾 Guardado automáticamente</div>
+
+<script>
+  // ── Utilidades ────────────────────────────────────────────────────────────
+  function showToast(msg, type='success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.className = `toast ${type} show`;
+    setTimeout(() => t.classList.remove('show'), 2800);
+  }
+
+  function showSavedIndicator() {
+    const el = document.getElementById('save-indicator');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1800);
+  }
+
+  // ── Mostrar/ocultar combos de evaluador combinado ─────────────────────────
+  function toggleCombinedFields() {
+    const v = document.getElementById('report-type').value;
+    const isComb = v === 'audiometria_espirometria';
+    
+    // Contenedores de evaluadores específicos
+    document.getElementById('evaluator-audio-container').style.display = isComb ? 'flex' : 'none';
+    document.getElementById('evaluator-spiro-container').style.display = isComb ? 'flex' : 'none';
+    
+    // Bloquear el evaluador principal si es combinado
+    const mainEval = document.getElementById('evaluator-main');
+    if (isComb) {
+      mainEval.disabled = true;
+      mainEval.classList.add('bg-surface-container-high', 'cursor-not-allowed', 'opacity-60');
+    } else {
+      mainEval.disabled = false;
+      mainEval.classList.remove('bg-surface-container-high', 'cursor-not-allowed', 'opacity-60');
+    }
+  }
+
+  // ── Inicializar Calendario (Flatpickr) ────────────────────────────────────
+  // ── Inicializar Calendario (Flatpickr) ────────────────────────────────────
+  const pickers = {};
+  function initDatePicker() {
+    // Configuración para fecha única
+    pickers.evalDate = flatpickr("#evaluation-date", {
+      locale: "es",
+      dateFormat: "Y-m-d",
+      altInput: true,
+      altFormat: "j \\d\\e F, Y",
+      onChange: () => scheduleAutoSave()
+    });
+    // Configuración para fechas múltiples
+    pickers.evalDates = flatpickr("#evaluation-dates", {
+      locale: "es",
+      mode: "multiple",
+      dateFormat: "Y-m-d",
+      altInput: true,
+      altFormat: "j \\d\\e F, Y",
+      conjunction: " y ",
+      onChange: () => scheduleAutoSave()
+    });
+    // Fechas del estudio (Una fecha)
+    pickers.studyDate = flatpickr("#study-date", {
+      locale: "es", dateFormat: "Y-m-d", altInput: true, altFormat: "j \\d\\e F, Y",
+      onChange: () => scheduleAutoSave()
+    });
+    // Fechas del estudio (Varias)
+    pickers.studyDates = flatpickr("#study-dates-multi", {
+      locale: "es", mode: "multiple", dateFormat: "Y-m-d", altInput: true, altFormat: "j \\d\\e F, Y",
+      conjunction: " y ", onChange: () => scheduleAutoSave()
+    });
+  }
+
+  // ── Validación de Cédula (Patrones Python) ────────────────────────────────
+  function validarCedula(v) {
+    if (!v) return false;
+    const cleaned = v.trim().toUpperCase();
+    const patterns = [
+      /^(1[0-3]|[1-9])-\d{1,4}-\d{1,5}$/,
+      /^E-\d{1,4}-\d{1,7}$/,
+      /^N-\d{1,4}-\d{1,5}$/,
+      /^PE-\d{1,4}-\d{1,5}$/
+    ];
+    return patterns.some(p => p.test(cleaned));
+  }
+
+  // ── Recolectar datos del formulario ───────────────────────────────────────
+  function collectFormData() {
+    return {
+      report_type:      document.getElementById('report-type').value,
+      date_mode:        dateMode,
+      evaluation_date:  document.getElementById('evaluation-date').value,
+      evaluation_dates: document.getElementById('evaluation-dates').value,
+      evaluator_main:   document.getElementById('evaluator-main').value,
+      evaluator_audio:  document.getElementById('evaluator-audio').value,
+      evaluator_spiro:  document.getElementById('evaluator-spiro').value,
+      company_name:     document.getElementById('company-name').value,
+      study_date_mode:  studyDateMode,
+      study_date:       document.getElementById('study-date').value,
+      study_dates_multi:document.getElementById('study-dates-multi').value,
+      study_dates:      studyDateMode === 'single' ? document.getElementById('study-date').value : document.getElementById('study-dates-multi').value,
+      location:         document.getElementById('location').value,
+      company_activity: document.getElementById('company-activity').value,
+      country:          document.getElementById('country').value,
+      company_address:  document.getElementById('company-address').value,
+      counterpart_name: document.getElementById('counterpart-name').value,
+      counterpart_role: document.getElementById('counterpart-role').value
+    };
+  }
+
+  // ── Auto-save (fusiona con datos existentes para no borrar resultados) ────
+  let saveTimer = null;
+  async function autoSave(showIndicator = true) {
+    try {
+      const existing = await fetch('/api/report').then(r => r.ok ? r.json() : {}).catch(() => ({}));
+      const formData = collectFormData();
+      
+      // Si el campo de fecha está vacío en el DOM pero lo tenemos en el objeto fusionado, 
+      // podría ser una carga lenta. Solo sobreescribir si realmente hay algo en el DOM o si es intencional.
+      const merged = { ...existing, ...formData };
+      
+      const res = await fetch('/api/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(merged)
+      });
+      if (res.ok && showIndicator) showSavedIndicator();
+    } catch(e) { /* silencioso */ }
+  }
+
+  function scheduleAutoSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => autoSave(true), 700);
+  }
+
+  async function saveReport() {
+    await autoSave(false);
+    showToast('Borrador guardado correctamente ✓');
+  }
+
+  // ── Cargar todos los datos ────────────────────────────────────────────────
+  let allCounterparts = [];
+  async function loadData() {
+    try {
+      const [evRes, cpRes, rptRes] = await Promise.all([
+        fetch('/api/evaluators'),
+        fetch('/api/counterparts'),
+        fetch('/api/report')
+      ]);
+
+      const evaluators  = evRes.ok  ? await evRes.json()  : [];
+      const counterparts= cpRes.ok  ? await cpRes.json()  : [];
+      const report      = rptRes.ok ? await rptRes.json() : {};
+      
+      allCounterparts = counterparts;
+
+      // Referencias a combos
+      const evalMain  = document.getElementById('evaluator-main');
+      const evalAudio = document.getElementById('evaluator-audio');
+      const evalSpiro = document.getElementById('evaluator-spiro');
+      const cpSel     = document.getElementById('counterpart-name');
+
+      // Limpiar combos (preservando el primer "Seleccione...")
+      [evalMain, evalAudio, evalSpiro, cpSel].forEach(sel => {
+        if (!sel) return;
+        const firstOpt = sel.options[0];
+        sel.innerHTML = '';
+        if (firstOpt && (firstOpt.value === "" || firstOpt.text.includes("Seleccione"))) {
+          sel.add(firstOpt);
+        }
+      });
+
+      // Población de Evaluadores
+      evaluators.forEach(ev => {
+        if (evalMain) evalMain.add(new Option(ev.name, ev.id));
+        const rpts = ev.applicable_reports || [];
+        if (evalAudio && rpts.includes('audiometria')) {
+          evalAudio.add(new Option(ev.name, ev.id));
+        }
+        if (evalSpiro && rpts.includes('espirometria')) {
+          evalSpiro.add(new Option(ev.name, ev.id));
+        }
+      });
+
+      // Población de Contrapartes
+      counterparts.forEach(c => {
+        if (cpSel) cpSel.add(new Option(c.name, c.name));
+      });
+
+      // Rellenar valores guardados en el reporte
+      if (report.report_type)      document.getElementById('report-type').value      = report.report_type;
+      if (report.date_mode)        setDateMode(report.date_mode, false);
+      if (report.evaluation_date && pickers.evalDate) pickers.evalDate.setDate(report.evaluation_date);
+      if (report.evaluation_dates && pickers.evalDates) pickers.evalDates.setDate(report.evaluation_dates);
+      
+      if (report.evaluator_main)   document.getElementById('evaluator-main').value   = report.evaluator_main;
+      if (report.evaluator_audio)  document.getElementById('evaluator-audio').value  = report.evaluator_audio;
+      if (report.evaluator_spiro)  document.getElementById('evaluator-spiro').value  = report.evaluator_spiro;
+      if (report.company_name)     document.getElementById('company-name').value     = report.company_name;
+      
+      if (report.study_date_mode)  setStudyDateMode(report.study_date_mode, false);
+      if (report.study_date && pickers.studyDate) pickers.studyDate.setDate(report.study_date);
+      if (report.study_dates_multi && pickers.studyDates) pickers.studyDates.setDate(report.study_dates_multi);
+      
+      if (report.location)         document.getElementById('location').value         = report.location;
+      if (report.company_activity) document.getElementById('company-activity').value = report.company_activity;
+      if (report.country)          document.getElementById('country').value          = report.country;
+      if (report.company_address)  document.getElementById('company-address').value  = report.company_address;
+      if (report.counterpart_name) document.getElementById('counterpart-name').value = report.counterpart_name;
+      if (report.counterpart_role) document.getElementById('counterpart-role').value = report.counterpart_role;
+
+      toggleCombinedFields();
+    } catch(e) { 
+      console.error('Error crítico en loadData:', e);
+    }
+  }
+
+  // Toggle de fechas
+  const btnSingle = document.getElementById('btn-single-date');
+  const btnMulti = document.getElementById('btn-multi-date');
+  const contSingle = document.getElementById('single-date-container');
+  const contMulti = document.getElementById('multi-date-container');
+  let dateMode = 'single';
+
+  function setDateMode(mode, save = true) {
+    dateMode = mode;
+    if (mode === 'single') {
+      btnSingle.className = 'px-4 py-2 text-sm font-bold rounded-md transition-all bg-primary text-on-primary';
+      btnMulti.className = 'px-4 py-2 text-sm font-bold rounded-md transition-all text-on-surface-variant hover:bg-surface-container';
+      contSingle.classList.remove('hidden');
+      contMulti.classList.add('hidden');
+    } else {
+      btnMulti.className = 'px-4 py-2 text-sm font-bold rounded-md transition-all bg-primary text-on-primary';
+      btnSingle.className = 'px-4 py-2 text-sm font-bold rounded-md transition-all text-on-surface-variant hover:bg-surface-container';
+      contMulti.classList.remove('hidden');
+      contSingle.classList.add('hidden');
+    }
+    if (save) autoSave();
+  }
+
+  btnSingle.addEventListener('click', () => setDateMode('single'));
+  btnMulti.addEventListener('click', () => setDateMode('multi'));
+
+  // Toggle fechas estudio
+  const btnStudySingle = document.getElementById('btn-study-single');
+  const btnStudyMulti  = document.getElementById('btn-study-multi');
+  const contStudySingle= document.getElementById('study-single-container');
+  const contStudyMulti = document.getElementById('study-multi-container');
+  let studyDateMode = 'single';
+
+  function setStudyDateMode(mode, save = true) {
+    studyDateMode = mode;
+    if (mode === 'single') {
+      btnStudySingle.className = 'px-3 py-1.5 text-xs font-bold rounded-md transition-all bg-primary text-on-primary';
+      btnStudyMulti.className = 'px-3 py-1.5 text-xs font-bold rounded-md transition-all text-on-surface-variant hover:bg-surface-container';
+      contStudySingle.classList.remove('hidden');
+      contStudyMulti.classList.add('hidden');
+    } else {
+      btnStudyMulti.className = 'px-3 py-1.5 text-xs font-bold rounded-md transition-all bg-primary text-on-primary';
+      btnStudySingle.className = 'px-3 py-1.5 text-xs font-bold rounded-md transition-all text-on-surface-variant hover:bg-surface-container';
+      contStudyMulti.classList.remove('hidden');
+      contStudySingle.classList.add('hidden');
+    }
+    if (save) autoSave();
+  }
+
+  btnStudySingle.addEventListener('click', () => setStudyDateMode('single'));
+  btnStudyMulti.addEventListener('click', () => setStudyDateMode('multi'));
+
+  // ── Bindings ──────────────────────────────────────────────────────────────
+  const FIELD_IDS = [
+    'report-type', 'evaluator-main', 'evaluator-audio', 'evaluator-spiro', 'company-name', 
+    'location', 'company-activity', 'country', 'company-address', 'counterpart-name', 'counterpart-role'
+  ];
+  FIELD_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', scheduleAutoSave);
+    el.addEventListener('input',  scheduleAutoSave);
+  });
+
+  // Auto-fill rol de contraparte
+  document.getElementById('counterpart-name').addEventListener('change', (e) => {
+    const selected = e.target.value;
+    const cp = allCounterparts.find(c => c.name === selected);
+    if (cp && cp.role) {
+      document.getElementById('counterpart-role').value = cp.role;
+      scheduleAutoSave();
+    }
+  });
+
+  // Mostrar/ocultar campos combinados
+  document.getElementById('report-type').addEventListener('change', toggleCombinedFields);
+
+  // Guardar al salir de la página
+  window.addEventListener('pagehide', () => autoSave(false));
+  window.addEventListener('beforeunload', () => autoSave(false));
+
+  window.addEventListener('DOMContentLoaded', () => {
+    initDatePicker();
+    loadData();
+  });
+
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) loadData();
+  });
+
+  window.loadData = loadData;
+  window.saveReport = saveReport;
+  window.autoSave = autoSave;
+  window.collectFormData = collectFormData;
+</script>
+</body></html>

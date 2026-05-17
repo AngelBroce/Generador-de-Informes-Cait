@@ -51,6 +51,7 @@ from src.core.result_schemes import RESULT_SCHEMES
 from src.services.evaluators_repository import EvaluatorRepository, build_technical_details
 from src.services.counterparts_repository import CounterpartRepository
 from src.services.persons_repository import PersonsRepository
+from src.ui import theme
 
 
 class MainApplication:
@@ -58,28 +59,9 @@ class MainApplication:
     
     def __init__(self):
         """Inicializa la aplicación"""
-        ctk.set_appearance_mode("Light")
-        ctk.set_default_color_theme("green")
+        theme.apply_base_theme()
 
-        self.colors = {
-            "bg": "#F7F8FA",
-            "surface": "#FFFFFF",
-            "border": "#EEF0F2",
-            "primary": "#1B7A3D",
-            "primary_dark": "#15632F",
-            "primary_muted": "#E8F5EC",
-            "field_bg": "#F3F6F4",
-            "field_border": "#D8E2DD",
-            "chip_bg": "#E6F3EA",
-            "chip_text": "#1B7A3D",
-            "error": "#D92D20",
-            "text": "#1A1D21",
-            "text_muted": "#5F6B7A",
-            "text_light": "#C8E6C9",
-            "info_bg": "#EBF5FB",
-            "info_border": "#BEE0F5",
-            "info_text": "#1565C0",
-        }
+        self.colors = theme.COLORS
 
         self.root = ctk.CTk()
         self.root.title("Generador de Informes Clínicos - CAIT Panamá")
@@ -87,6 +69,7 @@ class MainApplication:
         (
             widget_scaling,
             window_scaling,
+            font_scale,
             default_width,
             default_height,
             min_width,
@@ -95,6 +78,27 @@ class MainApplication:
         ctk.set_widget_scaling(widget_scaling)
         ctk.set_window_scaling(window_scaling)
         self.base_widget_scaling = widget_scaling
+
+        # Aplicar font_scale a CTkFont globalmente mediante monkey-patch.
+        # Esto compensa que widget_scaling=1.0 reduciría el tamaño visual de fuentes.
+        # Con este patch, todos los CTkFont(size=N) se crean con size=N*font_scale
+        # automáticamente, sin necesidad de cambiar cada línea de código.
+        _OriginalCTkFont = ctk.CTkFont
+        _fs = font_scale
+
+        class _ScaledCTkFont(_OriginalCTkFont):
+            def __init__(self_inner, family="default", size=13, weight="normal", slant="roman", underline=False, overstrike=False):
+                super().__init__(
+                    family=family,
+                    size=max(8, round(size * _fs)),
+                    weight=weight,
+                    slant=slant,
+                    underline=underline,
+                    overstrike=overstrike,
+                )
+
+        ctk.CTkFont = _ScaledCTkFont
+        self._font_scale = font_scale
 
         self.root.geometry(f"{default_width}x{default_height}")
         self.root.minsize(min_width, min_height)
@@ -109,6 +113,7 @@ class MainApplication:
         self.action_buttons = []
         self._active_mousewheel_canvas = None
         self._mousewheel_initialized = False
+        self._section_canvases: list = []  # Registro de todos los canvas de secciones
         self.date_validation_cmd = self.root.register(self._validate_date_input)
         self.numeric_validation_cmd = self.root.register(self._validate_numeric_input)
         self._initialize_mousewheel_support()
@@ -222,7 +227,12 @@ class MainApplication:
         self.setup_styles()
         self.setup_ui()
         self._initialize_responsive_behavior()
+        self._enable_windows_compositing()
         self._purge_old_drafts()
+
+    def _enable_windows_compositing(self) -> None:
+        """No-op: WS_EX_COMPOSITED fue descartado por causar artefactos en pantalla completa."""
+        pass
 
     def _resolve_runtime_data_root(self) -> Path:
         """Devuelve la ruta de datos editable según el modo de ejecución."""
@@ -342,7 +352,6 @@ class MainApplication:
             self._sidebar_toggle_btn.configure(text="\u25b6")
             self._sidebar_visible = False
         else:
-            # Re-insertar el sidebar en su posición original (antes del contenido)
             self.menu_frame.pack(
                 side=tk.LEFT, fill=tk.Y, padx=(0, 16),
                 before=self.sections_container,
@@ -350,29 +359,52 @@ class MainApplication:
             self._sidebar_toggle_btn.configure(text="\u25c0")
             self._sidebar_visible = True
 
+        # root.update() fuerza un repintado completo de todos los widgets.
+        # update_idletasks() NO es suficiente — deja artefactos visuales en CTkScrollableFrame.
+        self.root.update()
+        self._force_all_canvases_redraw()
+
+    def _force_all_canvases_redraw(self):
+        """Fuerza el repintado de todos los canvas de sección para eliminar artefactos visuales."""
+        canvases = [c for c in self._section_canvases if c.winfo_exists()]
+        self._section_canvases = canvases
+        for canvas in canvases:
+            try:
+                # Actualizar la scroll region para forzar re-render
+                canvas.configure(scrollregion=canvas.bbox("all"))
+                canvas.update_idletasks()
+                # Forzar redibujado del contenido embebido
+                canvas.event_generate("<Configure>")
+            except Exception:
+                pass
+
     def _get_adaptive_display_settings(self):
         """Calcula escala y dimensiones iniciales adaptadas a la pantalla."""
 
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
 
-        # Adaptado para distintas resoluciones de pantalla
+        # widget_scaling DEBE ser 1.0 en todas las resoluciones.
+        # Con widget_scaling > 1.0, CustomTkinter escala las coordenadas internas
+        # de sus canvas, pero CTkScrollableFrame usa coordenadas sin escalar.
+        # Esa diferencia hace que cada CTkLabel/CTkButton aparezca en dos posiciones
+        # simultáneamente al hacer scroll (ghosting). Con 1.0 no hay desincronización.
+        widget_scaling = 1.0
+
+        # font_scale: lo que antes hacía widget_scaling visualmente (agrandar fuentes).
+        # Se aplica directamente a los tamaños de CTkFont via monkey-patch.
         if screen_width <= 1366 or screen_height <= 768:
-            # Laptops pequeñas y HD
-            widget_scaling = 1.45
-            window_scaling = 1.15
-        elif screen_width <= 1536 or screen_height <= 900:
-            # Laptops medianas (FHD pequeño)
-            widget_scaling = 1.40
-            window_scaling = 1.12
-        elif screen_width <= 1920 or screen_height <= 1080:
-            # Full HD estándar
-            widget_scaling = 1.35
+            font_scale   = 1.15
             window_scaling = 1.10
+        elif screen_width <= 1536 or screen_height <= 900:
+            font_scale   = 1.25
+            window_scaling = 1.20
+        elif screen_width <= 1920 or screen_height <= 1080:
+            font_scale   = 1.35
+            window_scaling = 1.30
         else:
-            # QHD / 4K
-            widget_scaling = 1.30
-            window_scaling = 1.08
+            font_scale   = 1.45
+            window_scaling = 1.40
 
         default_width = min(1600, max(1024, int(screen_width * 0.92)))
         default_height = min(1020, max(720, int(screen_height * 0.88)))
@@ -383,6 +415,7 @@ class MainApplication:
         return (
             widget_scaling,
             window_scaling,
+            font_scale,
             default_width,
             default_height,
             min_width,
@@ -391,92 +424,8 @@ class MainApplication:
     
     def setup_styles(self):
         """Configura los estilos de la aplicación."""
-        style = ttk.Style(self.root)
-        style.theme_use("clam")
-
-        # Fuente base mayor para accesibilidad visual.
-        style.configure(".", font=("Segoe UI", 13))
-
-        bg = self.colors["bg"]
-        surface = self.colors["surface"]
-        border = self.colors["border"]
-        primary = self.colors["primary"]
-        primary_dark = self.colors["primary_dark"]
-        primary_muted = self.colors["primary_muted"]
-        text = self.colors["text"]
-        muted = self.colors["text_muted"]
-        field_bg = self.colors["field_bg"]
-
-        style.configure("TFrame", background=surface)
-        style.configure("Header.TFrame", background=primary)
-        style.configure(
-            "Header.TLabel",
-            background=primary,
-            foreground=surface,
-            font=("Segoe UI", 24, "bold"),
-        )
-        style.configure("Title.TLabel", font=("Segoe UI", 20, "bold"), foreground=primary)
-        style.configure("Subtitle.TLabel", font=("Segoe UI", 14), foreground=muted)
-        style.configure("TLabel", background=surface, foreground=text)
-
-        style.configure("Action.TButton", font=("Segoe UI", 13, "bold"), padding=9)
-        style.map(
-            "Action.TButton",
-            background=[("pressed", primary_dark), ("active", primary)],
-            foreground=[("active", surface)],
-        )
-
-        style.configure("Primary.TButton", font=("Segoe UI", 13, "bold"), padding=9)
-        style.map(
-            "Primary.TButton",
-            background=[("pressed", primary_dark), ("active", primary)],
-            foreground=[("active", surface)],
-        )
-
-        style.configure(
-            "Menu.TButton",
-            font=("Segoe UI", 13),
-            padding=11,
-            background=surface,
-            foreground=primary,
-        )
-        style.map("Menu.TButton", background=[("active", primary_muted)])
-
-        style.configure(
-            "MenuActive.TButton",
-            font=("Segoe UI", 13, "bold"),
-            padding=11,
-            background=primary,
-            foreground=surface,
-        )
-        style.map("MenuActive.TButton", background=[("active", primary)])
-
-        style.configure("TSeparator", background=border)
-
-        style.configure(
-            "Treeview",
-            background=surface,
-            fieldbackground=surface,
-            foreground=text,
-            bordercolor=border,
-            lightcolor=border,
-            darkcolor=border,
-            rowheight=34,
-            font=("Segoe UI", 13),
-        )
-        style.configure(
-            "Treeview.Heading",
-            background=primary_muted,
-            foreground=primary,
-            font=("Segoe UI", 13, "bold"),
-        )
-        style.map(
-            "Treeview",
-            background=[("selected", primary)],
-            foreground=[("selected", surface)],
-        )
-        style.configure("TEntry", fieldbackground=field_bg, padding=8, font=("Segoe UI", 13))
-        style.configure("TCombobox", padding=8, font=("Segoe UI", 13))
+        fs = getattr(self, "_font_scale", 1.0)
+        theme.setup_ttk_styles(self.root, fs)
 
     def _create_card(self, parent, padding: int = 16):
         """Crea una tarjeta con bordes suaves y contenido interno."""
@@ -488,7 +437,7 @@ class MainApplication:
             border_width=1,
             border_color=self.colors["border"],
         )
-        inner = ctk.CTkFrame(card, fg_color="transparent", corner_radius=0)
+        inner = ctk.CTkFrame(card, fg_color=self.colors["surface"], corner_radius=0)
         inner.pack(fill=tk.BOTH, expand=True, padx=padding, pady=padding)
         return card, inner
 
@@ -1119,17 +1068,14 @@ class MainApplication:
         ).pack(fill=tk.X)
         ttk.Separator(menu_frame, orient="horizontal").pack(fill=tk.X, padx=12, pady=(0, 8))
 
-        menu_buttons_frame = ctk.CTkScrollableFrame(
+        # Sidebar sin CTkScrollableFrame — CTkFrame simple evita ghosting en fullscreen
+        menu_buttons_frame = ctk.CTkFrame(
             menu_frame,
             fg_color=surface,
             corner_radius=0,
-            border_width=0,
-            scrollbar_button_color=primary_muted,
-            scrollbar_button_hover_color="#D4EDDA",
         )
         menu_buttons_frame.pack(fill=tk.BOTH, expand=True, padx=(8, 6), pady=(0, 8))
         self.menu_buttons_frame = menu_buttons_frame
-        self._bind_scrollable_frame_mousewheel(menu_buttons_frame)
 
         sections_container = ctk.CTkFrame(
             body_frame,
@@ -1463,7 +1409,7 @@ class MainApplication:
         self.counterpart_role_entry.grid(row=counterpart_role_row, column=1, sticky="nsew", padx=12, pady=8)
 
         self._create_pill_label(form, "Fecha de evaluación *").grid(row=date_row, column=0, sticky=tk.W, pady=8)
-        date_container = ctk.CTkFrame(form, fg_color="transparent", corner_radius=0)
+        date_container = ctk.CTkFrame(form, fg_color=self.colors["surface"], corner_radius=0)
         date_container.grid(row=date_row, column=1, sticky="nsew", padx=12, pady=8)
 
         date_mode_selector = ctk.CTkSegmentedButton(
@@ -1481,7 +1427,7 @@ class MainApplication:
         )
         date_mode_selector.pack(anchor=tk.W, pady=(0, 8))
 
-        self.evaluation_single_date_container = ctk.CTkFrame(date_container, fg_color="transparent", corner_radius=0)
+        self.evaluation_single_date_container = ctk.CTkFrame(date_container, fg_color=self.colors["surface"], corner_radius=0)
         date_wrapper = ctk.CTkFrame(
             self.evaluation_single_date_container,
             fg_color=self.colors["field_bg"],
@@ -1489,8 +1435,6 @@ class MainApplication:
             border_width=1,
             border_color=self.colors["field_border"],
         )
-        date_wrapper.configure(height=36)
-        date_wrapper.pack_propagate(False)
         date_wrapper.pack(anchor=tk.W, fill=tk.X)
         date_entry = self._create_date_entry(date_wrapper, self.date_var, width=16)
         date_entry.pack(fill=tk.BOTH, expand=True, padx=8, pady=6)
@@ -1504,7 +1448,7 @@ class MainApplication:
         date_error.pack(anchor=tk.W, pady=(2, 0))
         self._attach_date_validation(self.date_var, date_wrapper, date_error)
 
-        self.evaluation_multi_date_container = ctk.CTkFrame(date_container, fg_color="transparent", corner_radius=0)
+        self.evaluation_multi_date_container = ctk.CTkFrame(date_container, fg_color=self.colors["surface"], corner_radius=0)
         multi_date_wrapper = ctk.CTkFrame(
             self.evaluation_multi_date_container,
             fg_color=self.colors["field_bg"],
@@ -2197,13 +2141,23 @@ class MainApplication:
         self._normalize_date_var(text_var)
         width = self._responsive_date_width(width)
 
+        # Usar un factor ligeramente menor y asegurar que el texto no se recorte
+        date_font_size = max(9, round(10 * getattr(self, "_font_scale", 1.0)))
+
+        try:
+            style = ttk.Style()
+            # Añadir padding interno para que la fuente grande no se corte
+            style.configure('DateEntry', padding=(4, 4, 4, 4))
+        except Exception:
+            pass
+
         date_entry = DateEntry(
             parent,
             textvariable=text_var,
             selectmode="day",
             date_pattern="dd/MM/yyyy",
             showweeknumbers=False,
-            font=("Segoe UI", 11),
+            font=("Segoe UI", date_font_size),
         )
         date_entry.configure(width=width)
 
@@ -2891,9 +2845,9 @@ class MainApplication:
         header.pack(anchor=tk.W, pady=(0, 16), fill=tk.X)
 
         card, card_body = self._create_card(frame)
-        card.pack(fill=tk.X, pady=4)
+        card.pack(fill=tk.BOTH, expand=True, pady=4)
 
-        fields_frame = ctk.CTkFrame(card_body, fg_color="transparent", corner_radius=0)
+        fields_frame = ctk.CTkFrame(card_body, fg_color=self.colors["surface"], corner_radius=0)
         fields_frame.pack(fill=tk.X)
         fields_frame.grid_columnconfigure(1, weight=1)
 
@@ -2907,7 +2861,7 @@ class MainApplication:
         for idx, (label_text, var, field_type) in enumerate(field_specs):
             self._create_pill_label(fields_frame, label_text).grid(row=idx, column=0, sticky=tk.W, pady=8)
             if field_type == "study_date":
-                date_container = ctk.CTkFrame(fields_frame, fg_color="transparent", corner_radius=0)
+                date_container = ctk.CTkFrame(fields_frame, fg_color=self.colors["surface"], corner_radius=0)
                 date_container.grid(row=idx, column=1, sticky=tk.EW, padx=12, pady=8)
 
                 study_mode_selector = ctk.CTkSegmentedButton(
@@ -2925,7 +2879,7 @@ class MainApplication:
                 )
                 study_mode_selector.pack(anchor=tk.W, pady=(0, 8))
 
-                self.study_single_date_container = ctk.CTkFrame(date_container, fg_color="transparent", corner_radius=0)
+                self.study_single_date_container = ctk.CTkFrame(date_container, fg_color=self.colors["surface"], corner_radius=0)
                 study_date_wrapper = ctk.CTkFrame(
                     self.study_single_date_container,
                     fg_color=self.colors["field_bg"],
@@ -2937,7 +2891,7 @@ class MainApplication:
                 widget = self._create_date_entry(study_date_wrapper, var, width=16)
                 widget.pack(fill=tk.X, expand=True, padx=8, pady=6)
 
-                self.study_multi_date_container = ctk.CTkFrame(date_container, fg_color="transparent", corner_radius=0)
+                self.study_multi_date_container = ctk.CTkFrame(date_container, fg_color=self.colors["surface"], corner_radius=0)
                 study_multi_wrapper = ctk.CTkFrame(
                     self.study_multi_date_container,
                     fg_color=self.colors["field_bg"],
@@ -2993,8 +2947,7 @@ class MainApplication:
                     row=idx, column=1, sticky=tk.EW, padx=12, pady=8
                 )
 
-        # Espaciador inferior
-        ctk.CTkFrame(frame, fg_color="transparent", height=150).pack(fill=tk.X)
+
 
     def _build_drafts_section(self, frame: ttk.Frame):
         """Seccion para listar y cargar borradores guardados."""
@@ -3091,66 +3044,41 @@ class MainApplication:
     def _setup_scrollable_results_container(self, parent: ttk.Frame):
         """Crea un contenedor desplazable para los bloques de resultados."""
 
-        container = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
-        container.pack(fill=tk.BOTH, expand=True)
-
-        # Scrollbar visible para compatibilidad con todas las PCs
-        scrollbar = ctk.CTkScrollbar(
-            container,
-            orientation="vertical",
-            button_color=self.colors["border"],
-            button_hover_color=self.colors["primary"],
-        )
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        canvas = tk.Canvas(container, highlightthickness=0, bg=self.colors["bg"],
-                           yscrollcommand=scrollbar.set)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.configure(command=canvas.yview)
-
-        inner_frame = ctk.CTkFrame(canvas, fg_color="transparent", corner_radius=0)
-        window_id = canvas.create_window((0, 0), window=inner_frame, anchor="nw")
-        
-        # Espaciador global al final del canvas de resultados
-        self._results_spacer = ctk.CTkFrame(inner_frame, fg_color="transparent", height=200)
-        self._results_spacer.pack(side=tk.BOTTOM, fill=tk.X)
-
-        def _update_scroll_region(_event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-
-        def _resize_inner(event):
-            canvas.itemconfig(window_id, width=event.width)
-
-        inner_frame.bind("<Configure>", _update_scroll_region)
-        canvas.bind("<Configure>", _resize_inner)
-
-        # Activar scroll cuando el mouse entra al canvas O al inner_frame
-        self._bind_mousewheel(canvas)
-        inner_frame.bind("<Enter>", lambda _e: setattr(self, "_active_mousewheel_canvas", canvas), add="+")
-        inner_frame.bind("<Leave>", lambda _e: self._deactivate_canvas_if_match(canvas), add="+")
-
-        self.results_canvas = canvas
-        self.results_section_container = inner_frame
-
-    def _create_scrollable_section(self, parent: ctk.CTkFrame) -> ctk.CTkFrame:
-        """Crea un contenedor desplazable para una sección usando CTkScrollableFrame interno."""
-
         scrollable_frame = ctk.CTkScrollableFrame(
             parent,
-            fg_color="transparent",
+            fg_color=self.colors["surface"],
             corner_radius=0,
             scrollbar_button_color=self.colors["border"],
             scrollbar_button_hover_color=self.colors["primary"],
         )
-        scrollable_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        scrollable_frame.pack(fill=tk.BOTH, expand=True)
 
-        self._bind_scrollable_frame_mousewheel(scrollable_frame)
-
-        # Contenedor seguro para no corromper CTkScrollableFrame al limpiar con winfo_children()
-        content_frame = ctk.CTkFrame(scrollable_frame, fg_color="transparent", corner_radius=0)
+        # Frame interno seguro para winfo_children()
+        content_frame = ctk.CTkFrame(scrollable_frame, fg_color=self.colors["surface"], corner_radius=0)
         content_frame.pack(fill=tk.BOTH, expand=True)
 
-        return content_frame
+        self._results_spacer = ctk.CTkFrame(
+            content_frame, fg_color=self.colors["surface"], height=200
+        )
+        self._results_spacer.pack(side=tk.BOTTOM, fill=tk.X)
+
+        internal_canvas = getattr(scrollable_frame, "_parent_canvas", None)
+        self.results_canvas = internal_canvas
+        self.results_section_container = content_frame
+
+    def _create_scrollable_section(self, parent: ctk.CTkFrame) -> ctk.CTkScrollableFrame:
+        """Crea un contenedor desplazable para una sección."""
+
+        scrollable_frame = ctk.CTkScrollableFrame(
+            parent,
+            fg_color=self.colors["surface"],
+            corner_radius=0,
+            scrollbar_button_color=self.colors["border"],
+            scrollbar_button_hover_color=self.colors["primary"],
+        )
+        scrollable_frame.pack(fill=tk.BOTH, expand=True)
+
+        return scrollable_frame
 
     def _deactivate_canvas_if_match(self, canvas: tk.Canvas):
         """Desactiva el canvas activo solo si es el canvas indicado."""
@@ -3193,13 +3121,27 @@ class MainApplication:
             pass
 
     def _bind_scrollable_frame_mousewheel(self, scrollable_frame: ctk.CTkScrollableFrame):
-        """Enlaza la rueda del ratón a un CTkScrollableFrame."""
+        """Enlaza la rueda del ratón a un CTkScrollableFrame forzando repintado tras cada paso."""
 
         canvas = getattr(scrollable_frame, "_parent_canvas", None)
         if canvas is None:
             return
 
-        self._bind_mousewheel(canvas)
+        def _on_scroll(event):
+            """Scroll + repintado inmediato para evitar ghosting en Windows."""
+            delta = 0
+            if getattr(event, "delta", 0):
+                delta = int(-1 * (event.delta / 120)) * 2
+            elif getattr(event, "num", None) == 5:
+                delta = 2
+            elif getattr(event, "num", None) == 4:
+                delta = -2
+            if delta:
+                canvas.yview_scroll(delta, "units")
+                # Forzar repintado inmediato tras mover el canvas —
+                # sin esto, Windows muestra posición vieja + nueva simultáneamente
+                canvas.update_idletasks()
+            return "break"
 
         def _activate(_event):
             self._active_mousewheel_canvas = canvas
@@ -3207,6 +3149,14 @@ class MainApplication:
         def _deactivate(_event):
             if self._active_mousewheel_canvas is canvas:
                 self._active_mousewheel_canvas = None
+
+        # Usar add=False para reemplazar cualquier binding previo (evita doble disparo)
+        canvas.bind("<MouseWheel>", _on_scroll, add=False)
+        canvas.bind("<Button-4>", _on_scroll, add=False)
+        canvas.bind("<Button-5>", _on_scroll, add=False)
+        scrollable_frame.bind("<MouseWheel>", _on_scroll, add=False)
+        scrollable_frame.bind("<Button-4>", _on_scroll, add=False)
+        scrollable_frame.bind("<Button-5>", _on_scroll, add=False)
 
         scrollable_frame.bind("<Enter>", _activate, add="+")
         scrollable_frame.bind("<Leave>", _deactivate, add="+")
@@ -3239,19 +3189,15 @@ class MainApplication:
 
         delta = 0
         if getattr(event, "delta", 0):
-            delta = int(-1 * (event.delta / 120)) * 3
+            delta = int(-1 * (event.delta / 120)) * 2
         elif getattr(event, "num", None) == 5:
-            delta = 3
+            delta = 2
         elif getattr(event, "num", None) == 4:
-            delta = -3
+            delta = -2
 
         if delta:
             canvas.yview_scroll(delta, "units")
-            # Forzar repintado para evitar artefactos visuales en pantallas con escalado alto
-            try:
-                canvas.update_idletasks()
-            except Exception:
-                pass
+            canvas.update_idletasks()
             return "break"
         return None
 
@@ -4976,13 +4922,20 @@ class MainApplication:
         return payload
 
     def show_section(self, section_name: str):
-        """Muestra la sección seleccionada cambiando el contenido sin refrescar la vista."""
+        """Muestra la sección seleccionada ocultando el resto del layout."""
 
         frame = self.section_frames.get(section_name)
         if frame is None:
             return
 
-        frame.tkraise()
+        # Usar grid/grid_remove en lugar de tkraise — las secciones ocultas NO
+        # se renderizan en absoluto, evitando que su contenido "sangre" visualmente
+        for name, f in self.section_frames.items():
+            if name == section_name:
+                f.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
+            else:
+                f.grid_remove()
+
         for name, button in self.section_buttons.items():
             if name == section_name:
                 button.configure(
