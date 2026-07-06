@@ -146,9 +146,12 @@
     </div>
     <!-- tabla -->
     <div>
-      <div class="px-4 py-3 bg-surface-container-low border-b border-outline-variant flex items-center justify-between">
+      <div class="px-4 py-3 bg-surface-container-low border-b border-outline-variant flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <span class="text-xs font-bold text-on-surface uppercase tracking-wider">Listado de Evaluados</span>
-        <button data-action="clear-table" class="text-error text-xs font-bold hover:underline">Limpiar lista</button>
+        <div class="flex items-center gap-2">
+          <input data-filter="search" type="text" placeholder="Buscar por nombre..." class="px-2 py-1 text-xs border border-outline-variant rounded bg-white outline-none focus:ring-1 focus:ring-primary w-40 sm:w-48"/>
+          <button data-action="clear-table" class="text-error text-xs font-bold hover:underline">Limpiar lista</button>
+        </div>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-left border-collapse text-sm">
@@ -340,14 +343,31 @@ function renderTable(tipo) {
   if (!el) return;
   const tbody = el.querySelector('[data-tbody]');
   const emptyRow = el.querySelector('[data-empty]');
+  
+  // Obtener la consulta del buscador
+  const searchInput = el.querySelector('[data-filter="search"]');
+  const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
   Array.from(tbody.querySelectorAll('tr:not([data-empty])')).forEach(r => r.remove());
 
   const rows = state[tipo];
-  if (rows.length === 0) {
+  
+  // Filtrar filas preservando el índice original
+  const filteredRows = rows.map((e, originalIndex) => ({ ...e, originalIndex })).filter(e => {
+    if (!query) return true;
+    return e.name.toLowerCase().includes(query);
+  });
+
+  if (filteredRows.length === 0) {
     emptyRow.style.display = '';
+    if (query) {
+      emptyRow.querySelector('td').textContent = 'No se encontraron resultados para la búsqueda.';
+    } else {
+      emptyRow.querySelector('td').textContent = 'No hay resultados agregados aún.';
+    }
   } else {
     emptyRow.style.display = 'none';
-    rows.forEach((e, i) => {
+    filteredRows.forEach((e, i) => {
       const tr = document.createElement('tr');
       tr.className = 'hover:bg-surface-container-low transition-colors';
       tr.innerHTML = `
@@ -358,8 +378,8 @@ function renderTable(tipo) {
         <td class="px-4 py-3 text-on-surface-variant">${e.position}</td>
         <td class="px-4 py-3">${chipHtml(tipo, e.result)}</td>
         <td class="px-4 py-3 text-right space-x-2">
-          <button class="text-primary hover:underline text-xs font-bold" onclick="editRow('${tipo}',${i})">Editar</button>
-          <button class="text-error hover:underline text-xs font-bold" onclick="deleteRow('${tipo}',${i})">Eliminar</button>
+          <button class="text-primary hover:underline text-xs font-bold" onclick="editRow('${tipo}',${e.originalIndex})">Editar</button>
+          <button class="text-error hover:underline text-xs font-bold" onclick="deleteRow('${tipo}',${e.originalIndex})">Eliminar</button>
         </td>`;
       tbody.appendChild(tr);
     });
@@ -483,6 +503,11 @@ function createBlock(tipo) {
   // auto-uppercase cédula y filtrar letras no válidas (permitiendo E, N, P para Panamá)
   root.querySelector('[data-field="cedula"]').addEventListener('input', function() {
     this.value = this.value.toUpperCase().replace(/[^0-9\-ENP]/g,'');
+  });
+
+  // buscador por nombre
+  root.querySelector('[data-filter="search"]').addEventListener('input', () => {
+    renderTable(tipo);
   });
 
   return root;
