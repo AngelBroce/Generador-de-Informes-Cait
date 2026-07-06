@@ -1,5 +1,36 @@
 import os
 import sys
+
+class LogBuffer:
+    def __init__(self, original_stream):
+        self.original_stream = original_stream
+        self.buffer = []
+
+    def write(self, s):
+        if self.original_stream:
+            try:
+                self.original_stream.write(s)
+                self.original_stream.flush()
+            except Exception:
+                pass
+        self.buffer.append(s)
+
+    def flush(self):
+        if self.original_stream:
+            try:
+                self.original_stream.flush()
+            except Exception:
+                pass
+
+    def __getattr__(self, name):
+        return getattr(self.original_stream, name)
+
+# Instanciar y reemplazar streams estándar
+stdout_buffer = LogBuffer(sys.stdout)
+stderr_buffer = LogBuffer(sys.stderr)
+sys.stdout = stdout_buffer
+sys.stderr = stderr_buffer
+
 # pyrefly: ignore [missing-import]
 import uvicorn
 import webview
@@ -29,8 +60,24 @@ def set_console_visibility(visible: bool):
             if not _console_allocated:
                 # Crear consola si no existe (para modo windowed)
                 kernel32.AllocConsole()
-                sys.stdout = open('CONOUT$', 'w', encoding='utf-8')
-                sys.stderr = open('CONOUT$', 'w', encoding='utf-8')
+                
+                # Abrir salida de la consola de Windows
+                conout_stdout = open('CONOUT$', 'w', encoding='utf-8')
+                conout_stderr = open('CONOUT$', 'w', encoding='utf-8')
+                
+                # Volcar el búfer acumulado a la nueva consola para que no se pierdan los logs iniciales
+                for chunk in stdout_buffer.buffer:
+                    conout_stdout.write(chunk)
+                conout_stdout.flush()
+                
+                for chunk in stderr_buffer.buffer:
+                    conout_stderr.write(chunk)
+                conout_stderr.flush()
+                
+                # Redireccionar el original_stream de nuestros buffers a la consola recién abierta
+                stdout_buffer.original_stream = conout_stdout
+                stderr_buffer.original_stream = conout_stderr
+                
                 _console_allocated = True
                 print("--- CAIT INFORMES: MODO DEPUREACIÓN ACTIVADO ---")
             
@@ -461,7 +508,7 @@ def list_drafts():
 @app.post("/api/report")
 async def save_report(request: Request):
     data = await request.json()
-    data["_version"] = "2.2.8"
+    data["_version"] = "2.2.9"
     name = data.get("_draft_name", "current_report.json")
     if not name.endswith(".json"): name += ".json"
     
@@ -787,11 +834,15 @@ async def toggle_console(request: Request):
         return {"status": "ok", "message": "Consola habilitada"}
     return {"status": "error", "message": "Contraseña incorrecta"}
 
+@app.get("/api/debug/logs")
+def get_logs():
+    return {"status": "ok", "logs": "".join(stdout_buffer.buffer)}
+
 # Endpoint para generar PDF, etc.
 # ...
 
 def run_server():
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="error")
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
 
 class Api:
     def __init__(self):
@@ -804,6 +855,17 @@ class Api:
         if not self._window: return None
         result = self._window.create_file_dialog(webview.FOLDER_DIALOG)
         return result[0] if result else None
+
+    def open_logs_window(self):
+        webview.create_window(
+            'CAIT Panamá - Registro de Logs', 
+            'http://127.0.0.1:8000/resultados/logs.html', 
+            width=900, 
+            height=600,
+            text_select=True,
+            background_color='#09090b'
+        )
+        return True
 
 api = Api()
 
@@ -834,7 +896,7 @@ if __name__ == "__main__":
     # Iniciar ventana principal
     icon_path = str(Path(__file__).parent / 'logo-apli-removebg-preview.ico')
     window = webview.create_window(
-        'CAIT Panamá - Generador de Informes v2.2.8', 
+        'CAIT Panamá - Generador de Informes v2.2.9', 
         'http://127.0.0.1:8000', 
         width=1360, 
         height=900, 

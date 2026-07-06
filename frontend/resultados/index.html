@@ -272,8 +272,8 @@ async function savePersonToCatalog(p) {
 
 // ── Validación y Filtrado de cédula ──────────────────────────────────────────
 function sanitizarCedula(input) {
-  // Permitir solo números y guiones (según solicitud de no permitir letras)
-  input.value = input.value.replace(/[^0-9\-]/g, '');
+  // Permitir números, guiones y letras válidas para cédulas de Panamá (E, N, P)
+  input.value = input.value.toUpperCase().replace(/[^0-9\-ENP]/g, '');
 }
 
 function validarCedula(v) {
@@ -478,9 +478,9 @@ function createBlock(tipo) {
     autoSave();
   });
 
-  // auto-uppercase cédula (y filtrar letras según solicitud)
+  // auto-uppercase cédula y filtrar letras no válidas (permitiendo E, N, P para Panamá)
   root.querySelector('[data-field="cedula"]').addEventListener('input', function() {
-    this.value = this.value.toUpperCase().replace(/[^0-9\-]/g,'');
+    this.value = this.value.toUpperCase().replace(/[^0-9\-ENP]/g,'');
   });
 
   return root;

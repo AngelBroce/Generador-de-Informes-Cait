@@ -413,11 +413,11 @@ class PDFGenerator:
             canvas_obj.line(cx - w/2, y_pos - 2, cx + w/2, y_pos - 2)
 
         # 1. INFORME:
-        y -= 0.65 * inch
+        y -= 0.40 * inch
         draw_underlined_label(pdf_canvas, "INFORME:", center_x, y)
 
         # 2. TIPO DE EVALUACIÓN
-        y -= 0.35 * inch
+        y -= 0.20 * inch
         raw_type = (report_data.get("report_type") or report_data.get("type") or "").strip()
         normalized_type = raw_type.lower()
         if not raw_type:
@@ -435,27 +435,27 @@ class PDFGenerator:
         pdf_canvas.drawCentredString(center_x, y, report_type_text)
 
         # 3. EMPRESA:
-        y -= 0.55 * inch
+        y -= 0.35 * inch
         draw_underlined_label(pdf_canvas, "EMPRESA:", center_x, y)
 
         # 4. NOMBRE DE EMPRESA
-        y -= 0.35 * inch
+        y -= 0.20 * inch
         company_name = (report_data.get("company_name") or report_data.get("company") or "N/A").strip()
         pdf_canvas.setFont("Helvetica-Bold", 12)
         pdf_canvas.drawCentredString(center_x, y, company_name.upper())
 
         # 5. ESTUDIO OCUPACIONAL:
-        y -= 0.55 * inch
+        y -= 0.35 * inch
         draw_underlined_label(pdf_canvas, "ESTUDIO OCUPACIONAL:", center_x, y)
 
         # 6. LOCALIZACIÓN / PLANTA
-        y -= 0.35 * inch
+        y -= 0.20 * inch
         location = (report_data.get("location") or "N/A").strip()
         pdf_canvas.setFont("Helvetica-Bold", 12)
         pdf_canvas.drawCentredString(center_x, y, location.upper())
 
         # 7. PREPARADO POR:
-        y -= 0.55 * inch
+        y -= 0.35 * inch
         draw_underlined_label(pdf_canvas, "PREPARADO POR:", center_x, y)
 
         # 8. BLOQUE DE EVALUADORES
@@ -472,26 +472,26 @@ class PDFGenerator:
             
             pdf_canvas.setFont("Helvetica-Bold", 10)
             for detail in details[:2]:
-                line_y -= 0.22 * inch
+                line_y -= 0.16 * inch
                 pdf_canvas.drawCentredString(cx, line_y, detail)
 
-        y -= 0.35 * inch
+        y -= 0.20 * inch
         if len(technical_team) >= 2:
             _draw_member_card(technical_team[0], self.page_width * 0.25, y)
             _draw_member_card(technical_team[1], self.page_width * 0.75, y)
-            y -= 0.5 * inch
+            y -= 0.30 * inch
         else:
             member = technical_team[0] if technical_team else {}
             if member:
                 _draw_member_card(member, center_x, y)
-                y -= 0.5 * inch
+                y -= 0.30 * inch
 
         # 9. CONTRAPARTE TÉCNICA:
-        y -= 0.35 * inch
+        y -= 0.20 * inch
         draw_underlined_label(pdf_canvas, "CONTRAPARTE TECNICA:", center_x, y)
 
         # 10. VALOR CONTRAPARTE
-        y -= 0.35 * inch
+        y -= 0.20 * inch
         cp_name = (report_data.get("counterpart_name") or report_data.get("company_counterpart") or "").strip()
         cp_role = (report_data.get("counterpart_role") or "").strip()
         
@@ -499,11 +499,11 @@ class PDFGenerator:
         pdf_canvas.setFillColor(accent_color)
         pdf_canvas.drawCentredString(center_x, y, (cp_name or "SIN CONTRAPARTE").upper())
         if cp_role:
-            y -= 0.22 * inch
+            y -= 0.16 * inch
             pdf_canvas.drawCentredString(center_x, y, cp_role.upper())
 
         # 11. FECHA:
-        y -= 0.55 * inch
+        y -= 0.35 * inch
         pdf_canvas.setFont("Helvetica-Bold", 11)
         pdf_canvas.setFillColor(accent_color)
         
@@ -2816,11 +2816,6 @@ class PDFGenerator:
                 ("bilateral",  "BILATERAL",  "#C62828"),  # rojo oscuro
             ]
             data_labels, data_values, palette = [], [], []
-            group_config = [
-                ("normal",     "NORMAL",     "#2E7D32"),
-                ("unilateral", "UNILATERAL", "#F57C00"),
-                ("bilateral",  "BILATERAL",  "#C62828"),
-            ]
             for grp, label, color in group_config:
                 count = stats.get(f"_group_{grp}", 0)
                 if count > 0:
@@ -2864,7 +2859,7 @@ class PDFGenerator:
         ax.set_facecolor("none")
 
         explode = [0.05] * len(data_values)
-        wedges, texts, autotexts = ax.pie(
+        wedges, texts, autotexts = ax.pie(  # type: ignore
             data_values,
             colors=palette,
             startangle=90,
@@ -3001,7 +2996,7 @@ class PDFGenerator:
         if key == "name":
             return entry.get("name") or entry.get("full_name") or "N/A"
         if key == "identification":
-            return entry.get("identification") or entry.get("cedula") or "N/A"
+            return entry.get("identification") or entry.get("cedula") or entry.get("id") or "N/A"
         if key == "age":
             value = entry.get("age") or entry.get("edad")
             return str(value) if value else ""
@@ -3091,7 +3086,7 @@ class PDFGenerator:
         return report_data.get("link_mode") == "relative"
 
     def _draw_footer(self, pdf_canvas: canvas.Canvas, page_number: int = 1) -> None:
-        """Pie de página con numeración de página."""
+        """Pie de página con numeración de página (oculta el número en la portada)."""
 
         y = self.bottom_margin / 2
         motto_y = y + 0.22 * inch
@@ -3099,10 +3094,11 @@ class PDFGenerator:
         pdf_canvas.setFillColor(colors.HexColor("#666666"))
         pdf_canvas.drawCentredString(self.page_width / 2, motto_y, '"EL PILAR DE TUS SENTIDOS".')
 
-        pdf_canvas.setFont("Helvetica", 8)
-        pdf_canvas.setFillColor(colors.black)
-        pdf_canvas.drawString(
-            self.page_width - self.right_margin - 0.5 * inch,
-            y,
-            f"Página {page_number}",
-        )
+        if page_number > 1:
+            pdf_canvas.setFont("Helvetica", 8)
+            pdf_canvas.setFillColor(colors.black)
+            pdf_canvas.drawString(
+                self.page_width - self.right_margin - 0.5 * inch,
+                y,
+                f"Página {page_number}",
+            )

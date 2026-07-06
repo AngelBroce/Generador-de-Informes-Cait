@@ -342,6 +342,93 @@ window.toggleDebugPassVisibility = () => {
 
 window.closeDebugModal = () => document.getElementById('modal-debug').classList.add('hidden');
 
+function initLogsModal() {
+  if (document.getElementById('modal-logs')) return;
+  const modal = document.createElement('div');
+  modal.id = 'modal-logs';
+  modal.className = 'hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[9999] backdrop-blur-sm';
+  modal.innerHTML = `
+    <div class="bg-surface p-6 rounded-2xl shadow-2xl w-[90%] max-w-4xl border border-outline-variant animate-in fade-in zoom-in duration-200 flex flex-col h-[80vh] text-on-surface">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h3 class="text-lg font-bold text-primary">Logs del Sistema (Modo Desarrollador)</h3>
+          <p class="text-xs text-outline">Registro de eventos y errores en tiempo real.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <label class="flex items-center gap-2 text-xs text-outline cursor-pointer select-none">
+            <input type="checkbox" id="logs-auto-refresh" checked class="rounded border-outline bg-surface focus:ring-primary">
+            Auto-actualizar
+          </label>
+          <button onclick="refreshLogs()" class="p-2 text-outline hover:text-primary hover:bg-surface-container-high rounded-lg transition-colors flex items-center justify-center" title="Actualizar">
+            <span class="material-symbols-outlined" style="font-size:20px;">refresh</span>
+          </button>
+          <button onclick="copyLogsToClipboard()" class="p-2 text-outline hover:text-primary hover:bg-surface-container-high rounded-lg transition-colors flex items-center justify-center" title="Copiar al portapapeles">
+            <span class="material-symbols-outlined" style="font-size:20px;">content_copy</span>
+          </button>
+        </div>
+      </div>
+      <div class="flex-1 min-h-0 bg-zinc-950 text-emerald-400 font-mono p-4 text-xs overflow-y-auto rounded-xl border border-zinc-800" id="logs-content-container">
+        <pre id="logs-content" class="whitespace-pre-wrap break-all"></pre>
+      </div>
+      <div class="flex justify-end gap-3 mt-4">
+        <button onclick="closeLogsModal()" class="px-6 py-2 text-xs font-bold bg-primary text-on-primary rounded-lg shadow-md hover:scale-105 transition-all">Cerrar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+let logsInterval = null;
+
+window.closeLogsModal = () => {
+  document.getElementById('modal-logs').classList.add('hidden');
+  if (logsInterval) {
+    clearInterval(logsInterval);
+    logsInterval = null;
+  }
+};
+
+window.copyLogsToClipboard = () => {
+  const content = document.getElementById('logs-content').innerText;
+  navigator.clipboard.writeText(content).then(() => {
+    alert('Logs copiados al portapapeles');
+  }).catch(err => {
+    console.error('Error al copiar logs:', err);
+  });
+};
+
+window.refreshLogs = async () => {
+  try {
+    const res = await fetch('/api/debug/logs');
+    const data = await res.json();
+    if (data.status === 'ok') {
+      const container = document.getElementById('logs-content-container');
+      const pre = document.getElementById('logs-content');
+      
+      const isScrolledToBottom = container.scrollHeight - container.clientHeight <= container.scrollTop + 60;
+      
+      pre.innerText = data.logs || 'No hay logs registrados.';
+      
+      if (isScrolledToBottom) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+  } catch (e) {
+    console.error('Error fetching logs:', e);
+  }
+};
+
+window.startLogsPolling = () => {
+  if (logsInterval) clearInterval(logsInterval);
+  window.refreshLogs();
+  logsInterval = setInterval(() => {
+    const auto = document.getElementById('logs-auto-refresh');
+    if (auto && auto.checked && !document.getElementById('modal-logs').classList.contains('hidden')) {
+      window.refreshLogs();
+    }
+  }, 2000);
+};
+
 window.confirmDebug = async () => {
   const pass = document.getElementById('debug-pass').value;
   if (!pass) return;
@@ -355,7 +442,14 @@ window.confirmDebug = async () => {
     if (data.status === 'ok') {
       document.getElementById('modal-debug').classList.add('hidden');
       document.getElementById('debug-pass').value = '';
-      alert(data.message);
+      
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.open_logs_window) {
+        window.pywebview.api.open_logs_window();
+      } else {
+        initLogsModal();
+        document.getElementById('modal-logs').classList.remove('hidden');
+        window.startLogsPolling();
+      }
     } else {
       alert('Acceso denegado');
     }

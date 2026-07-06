@@ -176,6 +176,7 @@
       document.getElementById('ev-registry').value = '';
       document.getElementById('ev-file').value = '';
       document.getElementById('ev-file-name').textContent = 'Sin archivo...';
+      document.querySelectorAll('.ev-applies').forEach(c => c.checked = false);
       loadEvaluators();
     } else {
       showToast('Error al guardar','error');

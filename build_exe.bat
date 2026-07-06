@@ -2,7 +2,7 @@
 echo.
 echo [1/2] Compilando ejecutable con PyInstaller (CARPETA DIST)...
 echo.
-"C:\Users\fioni\Documents\practica profecional\.venv\Scripts\pyinstaller.exe" CAIT_Informes.spec --clean --noconfirm
+pyinstaller CAIT_Informes.spec --clean --noconfirm
 
 echo.
 echo [2/2] PyInstaller finalizado con exito.

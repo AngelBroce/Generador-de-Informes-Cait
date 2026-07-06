@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAIT Panamá - Registro de Logs</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <style>
+    body {
+      background-color: #09090b;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+  </style>
+</head>
+<body class="flex flex-col h-screen text-zinc-300">
+  <header class="flex items-center justify-between px-6 py-4 bg-zinc-900 border-b border-zinc-800">
+    <div class="flex items-center gap-3">
+      <span class="material-symbols-outlined text-emerald-500" style="font-size: 28px;">terminal</span>
+      <div>
+        <h1 class="text-sm font-bold text-zinc-100">Registro de Logs del Sistema</h1>
+        <p class="text-[11px] text-zinc-500">Actualización en tiempo real</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <label class="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer select-none">
+        <input type="checkbox" id="logs-auto-refresh" checked class="rounded border-zinc-700 bg-zinc-850 text-emerald-500 focus:ring-emerald-500">
+        Auto-actualizar
+      </label>
+      <button onclick="refreshLogs()" class="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors flex items-center justify-center" title="Actualizar">
+        <span class="material-symbols-outlined" style="font-size:20px;">refresh</span>
+      </button>
+      <button onclick="copyLogsToClipboard()" class="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors flex items-center justify-center" title="Copiar al portapapeles">
+        <span class="material-symbols-outlined" style="font-size:20px;">content_copy</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="flex-1 min-h-0 p-6 overflow-y-auto" id="logs-container">
+    <pre id="logs-content" class="text-xs text-emerald-400 whitespace-pre-wrap break-all"></pre>
+  </main>
+
+  <script>
+    const container = document.getElementById('logs-container');
+    const contentPre = document.getElementById('logs-content');
+    const autoRefreshCheckbox = document.getElementById('logs-auto-refresh');
+    let logsInterval = null;
+
+    async function refreshLogs() {
+      try {
+        const res = await fetch('/api/debug/logs');
+        const data = await res.json();
+        if (data.status === 'ok') {
+          const isScrolledToBottom = container.scrollHeight - container.clientHeight <= container.scrollTop + 60;
+          contentPre.innerText = data.logs || 'No hay logs registrados.';
+          if (isScrolledToBottom) {
+            container.scrollTop = container.scrollHeight;
+          }
+        }
+      } catch (e) {
+        console.error('Error fetching logs:', e);
+      }
+    }
+
+    function copyLogsToClipboard() {
+      navigator.clipboard.writeText(contentPre.innerText).then(() => {
+        alert('Logs copiados al portapapeles');
+      }).catch(err => {
+        console.error('Error al copiar logs:', err);
+      });
+    }
+
+    function startLogsPolling() {
+      refreshLogs();
+      logsInterval = setInterval(() => {
+        if (autoRefreshCheckbox && autoRefreshCheckbox.checked) {
+          refreshLogs();
+        }
+      }, 1000);
+    }
+
+    window.addEventListener('DOMContentLoaded', startLogsPolling);
+  </script>
+</body>
+</html>
