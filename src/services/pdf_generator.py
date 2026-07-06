@@ -2933,8 +2933,8 @@ class PDFGenerator:
                 ("espiro_normal", ["normal"]),
                 ("restriccion_leve", ["restriccion leve", "leve"]),
                 ("obstruccion_leve", ["obstruccion leve"]),
-                ("obstruccion_restriccion_leve", ["obstruccion a restriccion", "obstruccion a restriccion leve"]),
-                ("restriccion_moderada", ["restriccion moderada"]),
+                ("obstruccion_restriccion_leve", ["obstruccion a restriccion", "obstruccion a restriccion leve", "obstruccion con posible restriccion"]),
+                ("restriccion_moderada", ["restriccion moderada", "restriccion moderadamente severa"]),
                 ("obstruccion_moderada", ["obstruccion moderada"]),
                 ("restriccion_grave", ["restriccion grave", "grave"]),
             ]
