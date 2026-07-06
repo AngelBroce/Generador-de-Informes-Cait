@@ -1898,11 +1898,16 @@ class MainApplication:
         self.evaluator_detail_label.configure(text=" | ".join(detail_parts))
 
     def _select_evaluator_credential(self, target_var: tk.StringVar) -> None:
-        """Permite escoger un PDF de idoneidad para un evaluador."""
+        """Permite escoger la idoneidad (PDF o Imagen) para un evaluador."""
 
         file_path = filedialog.askopenfilename(
-            title="Selecciona la idoneidad (PDF)",
-            filetypes=(("PDF", "*.pdf"), ("Todos los archivos", "*.*")),
+            title="Selecciona la idoneidad (PDF o Imagen)",
+            filetypes=(
+                ("Archivos permitidos (PDF/Imágenes)", "*.pdf *.png *.jpg *.jpeg"),
+                ("PDF (*.pdf)", "*.pdf"),
+                ("Imágenes (*.png, *.jpg, *.jpeg)", "*.png *.jpg *.jpeg"),
+                ("Todos los archivos", "*.*"),
+            ),
         )
         if not file_path:
             return
