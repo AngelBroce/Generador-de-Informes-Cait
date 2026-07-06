@@ -25,9 +25,31 @@ class LogBuffer:
     def __getattr__(self, name):
         return getattr(self.original_stream, name)
 
-# Instanciar y reemplazar streams estándar
-stdout_buffer = LogBuffer(sys.stdout)
-stderr_buffer = LogBuffer(sys.stderr)
+# Instanciar y reemplazar streams estándar con protección para None (entorno windowed de PyInstaller)
+if sys.stdout is not None:
+    stdout_buffer = LogBuffer(sys.stdout)
+else:
+    class DummyStream:
+        encoding = "utf-8"
+        errors = "strict"
+        closed = False
+        def write(self, s): pass
+        def flush(self): pass
+        def isatty(self): return False
+    stdout_buffer = LogBuffer(DummyStream())
+
+if sys.stderr is not None:
+    stderr_buffer = LogBuffer(sys.stderr)
+else:
+    class DummyStream:
+        encoding = "utf-8"
+        errors = "strict"
+        closed = False
+        def write(self, s): pass
+        def flush(self): pass
+        def isatty(self): return False
+    stderr_buffer = LogBuffer(DummyStream())
+
 sys.stdout = stdout_buffer
 sys.stderr = stderr_buffer
 
