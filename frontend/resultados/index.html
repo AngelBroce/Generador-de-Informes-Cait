@@ -148,9 +148,16 @@
     <div>
       <div class="px-4 py-3 bg-surface-container-low border-b border-outline-variant flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <span class="text-xs font-bold text-on-surface uppercase tracking-wider">Listado de Evaluados</span>
-        <div class="flex items-center gap-2">
-          <input data-filter="search" type="text" placeholder="Buscar por nombre..." class="px-2 py-1 text-xs border border-outline-variant rounded bg-white outline-none focus:ring-1 focus:ring-primary w-40 sm:w-48"/>
-          <button data-action="clear-table" class="text-error text-xs font-bold hover:underline">Limpiar lista</button>
+        <div class="flex items-center gap-2 flex-wrap">
+          <input type="file" data-file-input class="hidden" accept=".xlsx,.xls,.csv"/>
+          <button data-action="import-excel" class="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-primary bg-primary/10 border border-primary/30 rounded hover:bg-primary/20 transition-colors" title="Importar pacientes desde archivo Excel (.xlsx) o CSV (.csv)">
+            <span class="material-symbols-outlined" style="font-size:16px;">table_chart</span> Importar Excel/CSV
+          </button>
+          <button data-action="export-excel" class="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-secondary bg-secondary/10 border border-secondary/30 rounded hover:bg-secondary/20 transition-colors" title="Exportar reporte a Excel (.xlsx)">
+            <span class="material-symbols-outlined" style="font-size:16px;">download</span> Excel
+          </button>
+          <input data-filter="search" type="text" placeholder="Buscar por nombre..." class="px-2 py-1 text-xs border border-outline-variant rounded bg-white outline-none focus:ring-1 focus:ring-primary w-36 sm:w-44"/>
+          <button data-action="clear-table" class="text-error text-xs font-bold hover:underline">Limpiar</button>
         </div>
       </div>
       <div class="overflow-x-auto">
@@ -488,6 +495,57 @@ function createBlock(tipo) {
     sanitizarCedula(cedInput);
     buscarPersona(tipo, cedInput.value.trim());
   });
+
+  // Importar desde Excel / CSV
+  const fileInput = root.querySelector('[data-file-input]');
+  const importBtn = root.querySelector('[data-action="import-excel"]');
+  if (importBtn && fileInput) {
+    importBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async () => {
+      if (!fileInput.files || fileInput.files.length === 0) return;
+      const file = fileInput.files[0];
+      showToast(`Procesando archivo ${file.name}...`);
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('target_test_type', tipo);
+      
+      try {
+        const res = await fetch('/api/import/tabular', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok' && Array.isArray(data.entries)) {
+          // Agregar nuevas entradas
+          state[tipo].push(...data.entries);
+          renderTable(tipo);
+          await autoSave(true);
+          await loadPersons();
+          showToast(`¡Se importaron ${data.entries.length} pacientes y se registraron en la base de datos! ✓`);
+        } else {
+          showToast(data.message || 'Error al importar archivo', 'error');
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Error de conexión al importar', 'error');
+      } finally {
+        fileInput.value = '';
+      }
+    });
+  }
+
+  // Exportar a Excel directamente
+  const exportBtn = root.querySelector('[data-action="export-excel"]');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      if (window.downloadExchangeFile) {
+        window.downloadExchangeFile('/api/export/excel', `Resultados_${tipo}.xlsx`);
+      } else {
+        location.href = '/api/export/excel';
+      }
+    });
+  }
 
   // botones
   root.querySelector('[data-action="add"]').addEventListener('click', () => addEntry(tipo));

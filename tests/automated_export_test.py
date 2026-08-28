@@ -1,8 +1,13 @@
 import json
 import os
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from fastapi.testclient import TestClient
 from api_main import app
+
 
 client = TestClient(app)
 
@@ -57,15 +62,14 @@ def test_full_export_flow():
     print("Step 4: Verificando integridad de archivos...")
     assert os.path.exists(zip_path)
     
-    # El PDF deberia estar dentro del mismo directorio que el reporte
-    pdf_name = f"Informe_{sample_report['company_name']}.pdf"
-    # Buscamos en la ruta de datos configurada en api_main
-    from api_main import data_root
-    pdf_path = data_root / "reports" / pdf_name
-    
-    # Nota: Si falla la generacion real del PDF, api_main crea un dummy
+    # El PDF se genera dentro de la carpeta de exportación
+    folder_path = Path(data.get("folder_path", ""))
+    pdf_files = list(folder_path.glob("*.pdf")) if folder_path.exists() else []
+    assert len(pdf_files) > 0, f"No se encontró el PDF en {folder_path}"
+    pdf_path = pdf_files[0]
     assert os.path.exists(pdf_path)
     print(f"OK: PDF verificado: {pdf_path}")
+
     
     print("\n--- PRUEBA COMPLETADA CON EXITO ---")
     print(f"Resultado final: ZIP y PDF creados correctamente para '{sample_report['company_name']}'")

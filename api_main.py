@@ -58,16 +58,17 @@ import uvicorn
 import webview
 from threading import Thread
 from pathlib import Path
-from fastapi import FastAPI, Request, Form, UploadFile, File, HTTPException
+from fastapi import FastAPI, Request, Form, UploadFile, File, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse, StreamingResponse
 import json
 import tempfile
 import shutil
 from datetime import datetime
 import ctypes
 from typing import Optional, List, Dict
+
 
 _console_allocated = False
 
@@ -698,7 +699,129 @@ def delete_draft(name: str):
         target.unlink()
     return {"status": "ok"}
 
+# ================= DATA EXCHANGE API (EXPORTACIÓN E IMPORTACIÓN NO-PDF) =================
+from src.services.data_exchange_service import DataExchangeService
+data_exchange_service = DataExchangeService()
+
+@app.get("/api/export/cait")
+async def export_cait():
+    """Exporta el informe actual en formato portable .cait con datos y pacientes asociados."""
+    if not REPORT_DATA_FILE.exists():
+        raise HTTPException(status_code=404, detail="No hay datos de informe disponibles para exportar.")
+    with open(REPORT_DATA_FILE, "r", encoding="utf-8") as f:
+        data = normalize_report(json.load(f))
+    
+    pkg = data_exchange_service.export_report_cait(data, persons_repo=persons_repo)
+    company = str(data.get("company_name") or "Informe").strip()
+    safe_company = "".join(c for c in company if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_")
+    filename = f"CAIT_{safe_company}_{datetime.now().strftime('%Y%m%d')}.cait"
+    
+    content = json.dumps(pkg, ensure_ascii=False, indent=2).encode("utf-8")
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+@app.get("/api/export/caitpkg")
+async def export_caitpkg():
+    """Exporta paquete comprimido .caitpkg con datos y adjuntos para transferir a otra PC."""
+    if not REPORT_DATA_FILE.exists():
+        raise HTTPException(status_code=404, detail="No hay datos de informe disponibles para exportar.")
+    with open(REPORT_DATA_FILE, "r", encoding="utf-8") as f:
+        data = normalize_report(json.load(f))
+    
+    zip_path, filename = data_exchange_service.export_report_package_zip(data, data_root, persons_repo=persons_repo)
+    return FileResponse(path=zip_path, filename=filename, media_type="application/zip")
+
+@app.get("/api/export/excel")
+async def export_excel():
+    """Exporta el informe y todos los resultados a un archivo Excel (.xlsx) multihistorial."""
+    if not REPORT_DATA_FILE.exists():
+        raise HTTPException(status_code=404, detail="No hay datos de informe disponibles para exportar.")
+    with open(REPORT_DATA_FILE, "r", encoding="utf-8") as f:
+        data = normalize_report(json.load(f))
+    
+    company = str(data.get("company_name") or "Informe").strip()
+    safe_company = "".join(c for c in company if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_")
+    filename = f"Informe_CAIT_{safe_company}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    
+    excel_stream = data_exchange_service.export_to_excel(data, persons_repo=persons_repo)
+    return Response(
+        content=excel_stream.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+@app.get("/api/export/csv")
+async def export_csv(tipo: str = "all"):
+    """Exporta resultados a archivo CSV con codificación UTF-8 compatible con Excel."""
+    if not REPORT_DATA_FILE.exists():
+        raise HTTPException(status_code=404, detail="No hay datos de informe disponibles para exportar.")
+    with open(REPORT_DATA_FILE, "r", encoding="utf-8") as f:
+        data = normalize_report(json.load(f))
+    
+    company = str(data.get("company_name") or "Resultados").strip()
+    safe_company = "".join(c for c in company if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_")
+    filename = f"Resultados_CAIT_{safe_company}_{tipo}_{datetime.now().strftime('%Y%m%d')}.csv"
+    
+    csv_text = data_exchange_service.export_to_csv(data, test_type=tipo)
+    return Response(
+        content=csv_text.encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+@app.get("/api/system/backup")
+async def export_system_backup():
+    """Genera y descarga una copia de seguridad íntegra de toda la aplicación (.caitbackup)."""
+    backup_path, filename = data_exchange_service.export_full_backup_zip(data_root)
+    return FileResponse(path=backup_path, filename=filename, media_type="application/octet-stream")
+
+@app.post("/api/import/cait")
+async def import_cait_file(file: UploadFile = File(...)):
+    """Importa archivo .cait / .caitpkg / .json y lo auto-registra en el sistema."""
+    file_bytes = await file.read()
+    result = data_exchange_service.import_report_package(
+        file_bytes=file_bytes,
+        filename=file.filename or "archivo.cait",
+        data_root=data_root,
+        persons_repo=persons_repo,
+        evaluators_repo=evaluators_repo,
+        counterparts_repo=counterparts_repo,
+        normalize_func=normalize_report
+    )
+    return result
+
+@app.post("/api/import/tabular")
+async def import_tabular_file(
+    file: UploadFile = File(...),
+    target_test_type: str = Form("audiometria"),
+    default_result: str = Form("")
+):
+    """Importa pacientes/resultados desde Excel (.xlsx, .xls) o CSV (.csv) y los auto-registra."""
+    file_bytes = await file.read()
+    result = data_exchange_service.import_from_tabular_file(
+        file_bytes=file_bytes,
+        filename=file.filename or "datos.xlsx",
+        target_test_type=target_test_type,
+        persons_repo=persons_repo,
+        default_result=default_result
+    )
+    return result
+
+@app.post("/api/system/restore")
+async def restore_system_backup_endpoint(
+    file: UploadFile = File(...),
+    mode: str = Form("merge")
+):
+    """Restaura o fusiona una copia de seguridad en el sistema."""
+    file_bytes = await file.read()
+    result = data_exchange_service.restore_system_backup(file_bytes, data_root, mode=mode)
+    return result
+
 # ================= TEMPLATES API =================
+
 
 @app.get("/api/templates/default")
 def get_default_templates(report_type: str = "audiometria"):
@@ -878,6 +1001,12 @@ class Api:
         result = self._window.create_file_dialog(webview.FOLDER_DIALOG)
         return result[0] if result else None
 
+    def select_file(self, file_types=None):
+        if not self._window: return None
+        types = file_types or ('Archivos compatibles (*.cait;*.caitpkg;*.json;*.xlsx;*.xls;*.csv)', 'Todos los archivos (*.*)')
+        result = self._window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False, file_types=types)
+        return result[0] if result else None
+
     def open_logs_window(self):
         webview.create_window(
             'CAIT Panamá - Registro de Logs', 
@@ -918,7 +1047,7 @@ if __name__ == "__main__":
     # Iniciar ventana principal
     icon_path = str(Path(__file__).parent / 'logo-apli-removebg-preview.ico')
     window = webview.create_window(
-        'CAIT Panamá - Generador de Informes v2.2.9', 
+        'CAIT Panamá - Generador de Informes v2.3.0', 
         'http://127.0.0.1:8000', 
         width=1360, 
         height=900, 
@@ -928,3 +1057,4 @@ if __name__ == "__main__":
     )
     api.set_window(window)
     webview.start(icon=icon_path)
+

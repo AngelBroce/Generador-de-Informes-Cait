@@ -4,7 +4,7 @@
 [Setup]
 AppId={{4D174F38-C2F9-4D81-AB4F-8F4C9A1EC9CE}}
 AppName=CAIT Informes
-AppVersion=2.2.9
+AppVersion=2.3.0
 AppPublisher=CAIT Panamá
 DefaultDirName={autopf}\CAIT Informes
 DefaultGroupName=CAIT Informes
