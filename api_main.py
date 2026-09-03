@@ -63,6 +63,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, FileResponse, StreamingResponse
 import json
+import unicodedata
 import tempfile
 import shutil
 from datetime import datetime
@@ -703,6 +704,12 @@ def delete_draft(name: str):
 from src.services.data_exchange_service import DataExchangeService
 data_exchange_service = DataExchangeService()
 
+def sanitize_filename_ascii(text: str, fallback: str = "archivo") -> str:
+    nfkd = unicodedata.normalize('NFKD', str(text or ""))
+    ascii_text = nfkd.encode('ascii', 'ignore').decode('ascii')
+    safe = "".join(c for c in ascii_text if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_")
+    return safe or fallback
+
 @app.get("/api/export/cait")
 async def export_cait():
     """Exporta el informe actual en formato portable .cait con datos y pacientes asociados."""
@@ -711,9 +718,14 @@ async def export_cait():
     with open(REPORT_DATA_FILE, "r", encoding="utf-8") as f:
         data = normalize_report(json.load(f))
     
-    pkg = data_exchange_service.export_report_cait(data, persons_repo=persons_repo)
-    company = str(data.get("company_name") or "Informe").strip()
-    safe_company = "".join(c for c in company if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_")
+    pkg = data_exchange_service.export_report_cait(
+        data,
+        data_root=data_root,
+        persons_repo=persons_repo,
+        include_files=True,
+        include_drafts=True
+    )
+    safe_company = sanitize_filename_ascii(data.get("company_name"), "Informe")
     filename = f"CAIT_{safe_company}_{datetime.now().strftime('%Y%m%d')}.cait"
     
     content = json.dumps(pkg, ensure_ascii=False, indent=2).encode("utf-8")
@@ -725,13 +737,18 @@ async def export_cait():
 
 @app.get("/api/export/caitpkg")
 async def export_caitpkg():
-    """Exporta paquete comprimido .caitpkg con datos y adjuntos para transferir a otra PC."""
+    """Exporta paquete comprimido .caitpkg con datos, borradores y todos los adjuntos para transferir a otra PC."""
     if not REPORT_DATA_FILE.exists():
         raise HTTPException(status_code=404, detail="No hay datos de informe disponibles para exportar.")
     with open(REPORT_DATA_FILE, "r", encoding="utf-8") as f:
         data = normalize_report(json.load(f))
     
-    zip_path, filename = data_exchange_service.export_report_package_zip(data, data_root, persons_repo=persons_repo)
+    zip_path, filename = data_exchange_service.export_report_package_zip(
+        data,
+        data_root=data_root,
+        persons_repo=persons_repo,
+        include_drafts=True
+    )
     return FileResponse(path=zip_path, filename=filename, media_type="application/zip")
 
 @app.get("/api/export/excel")
@@ -742,8 +759,7 @@ async def export_excel():
     with open(REPORT_DATA_FILE, "r", encoding="utf-8") as f:
         data = normalize_report(json.load(f))
     
-    company = str(data.get("company_name") or "Informe").strip()
-    safe_company = "".join(c for c in company if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_")
+    safe_company = sanitize_filename_ascii(data.get("company_name"), "Informe")
     filename = f"Informe_CAIT_{safe_company}_{datetime.now().strftime('%Y%m%d')}.xlsx"
     
     excel_stream = data_exchange_service.export_to_excel(data, persons_repo=persons_repo)
@@ -761,8 +777,7 @@ async def export_csv(tipo: str = "all"):
     with open(REPORT_DATA_FILE, "r", encoding="utf-8") as f:
         data = normalize_report(json.load(f))
     
-    company = str(data.get("company_name") or "Resultados").strip()
-    safe_company = "".join(c for c in company if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_")
+    safe_company = sanitize_filename_ascii(data.get("company_name"), "Resultados")
     filename = f"Resultados_CAIT_{safe_company}_{tipo}_{datetime.now().strftime('%Y%m%d')}.csv"
     
     csv_text = data_exchange_service.export_to_csv(data, test_type=tipo)

@@ -338,7 +338,7 @@ function initDataExchangeModal() {
                     <span class="material-symbols-outlined" style="font-size:20px;">description</span>
                     Informe Portátil (.cait)
                   </div>
-                  <p class="text-xs text-outline mb-3">Guarda el caso clínico completo y los pacientes asociados en un archivo ligero para abrir en otra computadora.</p>
+                  <p class="text-xs text-outline mb-3">Guarda el caso clínico completo, pacientes asociados, borradores y archivos/PDFs adjuntos en un archivo portable para abrir en otra computadora.</p>
                 </div>
                 <button onclick="downloadExchangeFile('/api/export/cait', 'informe.cait')" class="w-full py-2 px-3 bg-primary text-on-primary rounded-lg text-xs font-bold hover:opacity-90 flex items-center justify-center gap-1.5 shadow-sm">
                   <span class="material-symbols-outlined" style="font-size:16px;">download</span> Descargar .cait
@@ -380,7 +380,7 @@ function initDataExchangeModal() {
                     <span class="material-symbols-outlined" style="font-size:20px;">folder_zip</span>
                     Paquete Completo (.caitpkg)
                   </div>
-                  <p class="text-xs text-outline mb-3">Empaqueta el caso junto con todos los certificados, imágenes y firmas adjuntas en un archivo ZIP portable.</p>
+                  <p class="text-xs text-outline mb-3">Empaqueta el caso completo junto con todos los certificados, PDFs ingresados, borradores y firmas en un archivo ZIP portable.</p>
                 </div>
                 <button onclick="downloadExchangeFile('/api/export/caitpkg', 'caso_completo.caitpkg')" class="w-full py-2 px-3 bg-primary text-on-primary rounded-lg text-xs font-bold hover:opacity-90 flex items-center justify-center gap-1.5 shadow-sm">
                   <span class="material-symbols-outlined" style="font-size:16px;">archive</span> Descargar .caitpkg
@@ -396,7 +396,7 @@ function initDataExchangeModal() {
                   <span class="material-symbols-outlined" style="font-size:18px;">security</span>
                   Copia de Seguridad del Sistema Completo (.caitbackup)
                 </div>
-                <p class="text-xs text-outline mt-0.5">Exporta todas las bases de datos (personas, evaluadores, contrapartes, plantillas y borradores) para migrar de PC.</p>
+                <p class="text-xs text-outline mt-0.5">Copia de seguridad completa: incluye todas las bases de datos, TODOS los borradores guardados, archivos y PDFs adjuntos.</p>
               </div>
               <button onclick="downloadExchangeFile('/api/system/backup', 'backup.caitbackup')" class="px-4 py-2 bg-primary text-on-primary rounded-lg text-xs font-bold hover:opacity-90 transition-opacity shrink-0 ml-4">
                 Exportar Backup
@@ -585,12 +585,14 @@ function initDataExchangeModal() {
         
         let detailsHtml = '';
         if (data.details) {
+          const draftsCount = data.details.drafts_restored !== undefined ? data.details.drafts_restored : (data.details.draft_filename ? 1 : 0);
+          const attCount = data.details.attachments_restored !== undefined ? data.details.attachments_restored : 0;
           detailsHtml = `
             <div class="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-primary/20">
-              <div><strong>Pacientes Registrados:</strong> ${data.details.persons_registered || 0}</div>
-              <div><strong>Borrador Guardado:</strong> ${data.details.draft_filename || 'Sí'}</div>
-              <div><strong>Audiometrías:</strong> ${data.details.total_audiometria || 0}</div>
-              <div><strong>Espirometrías:</strong> ${data.details.total_espirometria || 0}</div>
+              <div><strong>Borradores Restaurados:</strong> ${draftsCount}</div>
+              <div><strong>Archivos y PDFs Guardados:</strong> ${attCount}</div>
+              <div><strong>Pacientes Registrados:</strong> ${data.details.persons_registered !== undefined ? data.details.persons_registered : (data.details.total_files || '—')}</div>
+              <div><strong>Base de Datos:</strong> ${data.details.databases_merged !== undefined ? data.details.databases_merged + ' actualizadas' : (data.details.company || 'OK')}</div>
             </div>
           `;
         } else if (data.persons_registered !== undefined) {

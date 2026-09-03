@@ -207,14 +207,28 @@
     autoSave();
   }
 
-  function handleFiles(files, tipo) {
-    Array.from(files).forEach(f => {
+  async function handleFiles(files, tipo) {
+    for (const f of Array.from(files)) {
       if (!adjuntos.find(a => a.name === f.name)) {
-        adjuntos.push({ name: f.name, tipo });
+        const formData = new FormData();
+        formData.append('file', f);
+        try {
+          const res = await fetch('/api/upload-attachment', { method: 'POST', body: formData });
+          if (res.ok) {
+            adjuntos.push({ name: f.name, tipo });
+            showToast(`Archivo subido: ${f.name}`);
+          } else {
+            const err = await res.json().catch(() => ({}));
+            showToast(`Error subiendo ${f.name}: ${err.message || res.statusText}`, 'error');
+          }
+        } catch(e) {
+          console.error('Error al subir archivo', e);
+          showToast(`Error de conexión al subir ${f.name}`, 'error');
+        }
       }
-    });
+    }
     renderFilesTable();
-    autoSave();
+    await autoSave();
   }
 
   // Drag & drop

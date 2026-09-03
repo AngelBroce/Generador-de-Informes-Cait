@@ -7,6 +7,7 @@ asegurando el auto-registro de la información en la base de datos de la máquin
 
 from __future__ import annotations
 
+import base64
 import csv
 import io
 import json
@@ -14,6 +15,7 @@ import os
 import re
 import shutil
 import tempfile
+import unicodedata
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -34,10 +36,145 @@ class DataExchangeService:
     # EXPORTACIÓN
     # =========================================================================
 
-    def export_report_cait(self, report_data: dict, persons_repo=None) -> dict:
+    def _collect_all_report_files(self, report_data: dict, data_root: Path) -> List[Dict[str, Any]]:
+        """
+        Recolecta todos los archivos físicos (PDFs, imágenes, certificados, idoneidades)
+        asociados a un reporte para empaquetarlos en .caitpkg o embeberlos en .cait.
+        """
+        collected: List[Dict[str, Any]] = []
+        seen_paths = set()
+
+        def add_file(src_path: Path, category: str = "report_adjuntos", tipo: str = ""):
+            if not src_path or not src_path.exists() or not src_path.is_file():
+                return
+            resolved = str(src_path.resolve())
+            if resolved in seen_paths:
+                return
+            seen_paths.add(resolved)
+            
+            subfolder = category
+            try:
+                if src_path.resolve().is_relative_to((data_root / "attachments").resolve()):
+                    rel_p = src_path.resolve().relative_to((data_root / "attachments").resolve())
+                    sub = str(rel_p.parent).replace("\\", "/")
+                    if sub and sub != ".":
+                        subfolder = sub
+            except Exception:
+                pass
+
+            collected.append({
+                "name": src_path.name,
+                "path": src_path,
+                "category": subfolder,
+                "tipo": tipo,
+                "arcname": f"attachments/{subfolder}/{src_path.name}",
+                "rel_path": f"attachments/{subfolder}/{src_path.name}"
+            })
+
+        # 1. Adjuntos de la lista 'adjuntos'
+        for a in report_data.get("adjuntos", []):
+            if not isinstance(a, dict):
+                continue
+            name = a.get("name")
+            tipo = a.get("tipo", "")
+            path_str = a.get("path")
+            
+            found = False
+            if path_str:
+                for candidate in [
+                    data_root / path_str,
+                    data_root / path_str.replace("data/", "").replace("data\\", ""),
+                    Path(path_str)
+                ]:
+                    if candidate.exists() and candidate.is_file():
+                        add_file(candidate, category="report_adjuntos", tipo=tipo)
+                        found = True
+                        break
+            
+            if not found and name:
+                for folder in ["report_adjuntos", "idoneidad", "demo_zip_certificados", "demo_zip_resultados", "demo_asistencia", "demo_calibracion", "demo_protocolo", "demo_resultados"]:
+                    candidate = data_root / "attachments" / folder / name
+                    if candidate.exists() and candidate.is_file():
+                        add_file(candidate, category=folder, tipo=tipo)
+                        found = True
+                        break
+
+                if not found:
+                    for f in (data_root / "attachments").rglob(name):
+                        if f.is_file():
+                            add_file(f, category="report_adjuntos", tipo=tipo)
+                            break
+
+        # 2. calibration_files
+        for cf in report_data.get("calibration_files", []):
+            p_str = cf if isinstance(cf, str) else (cf.get("file") or cf.get("name") if isinstance(cf, dict) else "")
+            if p_str:
+                for candidate in [data_root / "attachments" / "calibracion" / os.path.basename(p_str), data_root / p_str, Path(p_str)]:
+                    if candidate.exists() and candidate.is_file():
+                        add_file(candidate, category="calibracion", tipo="Certificado Calibración")
+                        break
+
+        # 3. attendance_files
+        for af in report_data.get("attendance_files", []):
+            p_str = af if isinstance(af, str) else (af.get("file") or af.get("name") if isinstance(af, dict) else "")
+            if p_str:
+                for candidate in [data_root / "attachments" / "asistencia" / os.path.basename(p_str), data_root / p_str, Path(p_str)]:
+                    if candidate.exists() and candidate.is_file():
+                        add_file(candidate, category="asistencia", tipo="Listado Asistencia")
+                        break
+
+        # 4. result_attachments
+        res_att = report_data.get("result_attachments", {})
+        if isinstance(res_att, dict):
+            for aud in res_att.get("audiometria", []):
+                p_str = aud if isinstance(aud, str) else (aud.get("file") if isinstance(aud, dict) else "")
+                if p_str:
+                    c = data_root / p_str if (data_root / p_str).exists() else (data_root / "attachments" / "report_adjuntos" / os.path.basename(p_str))
+                    add_file(c, category="report_adjuntos", tipo="Audiograma")
+            for esp in res_att.get("espirometria", []):
+                p_str = esp if isinstance(esp, str) else (esp.get("file") if isinstance(esp, dict) else "")
+                if p_str:
+                    c = data_root / p_str if (data_root / p_str).exists() else (data_root / "attachments" / "report_adjuntos" / os.path.basename(p_str))
+                    add_file(c, category="report_adjuntos", tipo="Reporte Espirometría")
+
+        # 5. Idoneidades de evaluadores
+        eval_dir = data_root / "attachments" / "idoneidad"
+        if eval_dir.exists():
+            for f in eval_dir.glob("*"):
+                if f.is_file():
+                    add_file(f, category="idoneidad", tipo="Idoneidad Profesional")
+
+        return collected
+
+    def _collect_all_drafts(self, data_root: Path) -> List[Dict[str, Any]]:
+        """Recolecta todos los borradores almacenados en data_root/reports."""
+        drafts: List[Dict[str, Any]] = []
+        reports_dir = data_root / "reports"
+        if reports_dir.exists():
+            for f in sorted(reports_dir.glob("*.json")):
+                try:
+                    content = json.loads(f.read_text(encoding="utf-8"))
+                    drafts.append({
+                        "name": f.name,
+                        "modified": os.path.getmtime(f),
+                        "content": content
+                    })
+                except Exception as e:
+                    print(f"Error leyendo borrador {f.name}: {e}")
+        return drafts
+
+    def export_report_cait(
+        self,
+        report_data: dict,
+        data_root: Optional[Path] = None,
+        persons_repo=None,
+        include_files: bool = True,
+        include_drafts: bool = True
+    ) -> dict:
         """
         Genera una estructura serializable completa (.cait) del informe actual,
-        incluyendo pacientes asociados para facilitar el auto-registro en otra PC.
+        incluyendo pacientes asociados, borradores y archivos/PDFs embebidos en base64
+        para facilitar el auto-registro y portabilidad completa en otra PC.
         """
         data = dict(report_data)
         company = str(data.get("company_name") or data.get("company") or "Empresa").strip()
@@ -59,6 +196,31 @@ class DataExchangeService:
                 if p:
                     associated_persons.append(p)
 
+        # Archivos y PDFs embebidos
+        embedded_files = []
+        if include_files and data_root and data_root.exists():
+            files_to_embed = self._collect_all_report_files(data, data_root)
+            for finfo in files_to_embed:
+                fpath = finfo["path"]
+                try:
+                    raw_bytes = fpath.read_bytes()
+                    if len(raw_bytes) <= 20 * 1024 * 1024:
+                        embedded_files.append({
+                            "name": finfo["name"],
+                            "category": finfo["category"],
+                            "tipo": finfo.get("tipo", ""),
+                            "rel_path": finfo["rel_path"],
+                            "b64": base64.b64encode(raw_bytes).decode("ascii"),
+                            "size": len(raw_bytes)
+                        })
+                except Exception as e:
+                    print(f"Error embebiendo archivo {fpath}: {e}")
+
+        # Borradores guardados en el sistema
+        saved_drafts = []
+        if include_drafts and data_root and data_root.exists():
+            saved_drafts = self._collect_all_drafts(data_root)
+
         export_package = {
             "_header": {
                 "format": self.FORMAT_IDENTIFIER,
@@ -68,24 +230,43 @@ class DataExchangeService:
             },
             "report": data,
             "associated_persons": associated_persons,
+            "embedded_files": embedded_files,
+            "saved_drafts": saved_drafts,
             "summary": {
                 "company": company,
                 "evaluation_date": eval_date,
                 "report_type": data.get("report_type", "audiometria"),
                 "total_audiometria": len(data.get("resultados_audiometria", [])),
                 "total_espirometria": len(data.get("resultados_espirometria", [])),
+                "total_files": len(embedded_files),
+                "total_drafts": len(saved_drafts),
             }
         }
         return export_package
 
-    def export_report_package_zip(self, report_data: dict, data_root: Path, persons_repo=None) -> Tuple[Path, str]:
+    def export_report_package_zip(
+        self,
+        report_data: dict,
+        data_root: Path,
+        persons_repo=None,
+        include_drafts: bool = True
+    ) -> Tuple[Path, str]:
         """
-        Crea un paquete .caitpkg (ZIP portable) que incluye el JSON de datos
-        y todos los archivos adjuntos (certificados, fotos, idoneidades) referenciados.
+        Crea un paquete .caitpkg (ZIP portable) que incluye el JSON de datos,
+        todos los archivos adjuntos y PDFs (certificados, idoneidades, etc.)
+        y todos los borradores guardados para migrar todo sin perder nada.
         """
-        cait_data = self.export_report_cait(report_data, persons_repo=persons_repo)
+        cait_data = self.export_report_cait(
+            report_data,
+            data_root=data_root,
+            persons_repo=persons_repo,
+            include_files=False,  # En ZIP van como archivos binarios reales
+            include_drafts=include_drafts
+        )
         company = str(report_data.get("company_name") or "Informe").strip()
-        safe_company = "".join(c for c in company if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_")
+        nfkd = unicodedata.normalize('NFKD', company)
+        ascii_comp = nfkd.encode('ascii', 'ignore').decode('ascii')
+        safe_company = "".join(c for c in ascii_comp if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_") or "Informe"
         filename = f"CAIT_{safe_company}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.caitpkg"
         
         temp_dir = Path(tempfile.mkdtemp(prefix="cait_pkg_"))
@@ -95,29 +276,28 @@ class DataExchangeService:
             # Guardar el JSON principal
             zf.writestr("manifest.json", json.dumps(cait_data, ensure_ascii=False, indent=2))
             
-            # Recolectar y guardar adjuntos
-            adjuntos_list = report_data.get("adjuntos", [])
-            for a in adjuntos_list:
-                if not isinstance(a, dict):
-                    continue
-                name = a.get("name")
-                if not name:
-                    continue
-                # Buscar en report_adjuntos
-                src = data_root / "attachments" / "report_adjuntos" / name
+            # Recolectar y guardar todos los adjuntos físicos (PDFs, imágenes, etc.)
+            files_to_pack = self._collect_all_report_files(report_data, data_root)
+            for finfo in files_to_pack:
+                src = finfo["path"]
                 if src.exists():
-                    zf.write(src, arcname=f"attachments/report_adjuntos/{name}")
-                    
-            # Idoneidades
-            for eid in [report_data.get("evaluator_main"), report_data.get("evaluator_audio"), report_data.get("evaluator_spiro")]:
-                if not eid:
-                    continue
-                ev_dir = data_root / "attachments" / "idoneidad"
-                if ev_dir.exists():
-                    for f in ev_dir.glob("*"):
-                        if f.is_file():
-                            zf.write(f, arcname=f"attachments/idoneidad/{f.name}")
-                            
+                    zf.write(src, arcname=finfo["arcname"])
+            
+            # Recolectar y guardar todos los borradores del sistema en carpeta drafts/
+            if include_drafts:
+                reports_dir = data_root / "reports"
+                if reports_dir.exists():
+                    for draft_file in reports_dir.glob("*.json"):
+                        zf.write(draft_file, arcname=f"drafts/{draft_file.name}")
+                        
+            # Si existe informe PDF generado en exports, incluirlo también
+            exports_dir = data_root / "exports"
+            if exports_dir.exists():
+                for exp_pdf in exports_dir.rglob("*.pdf"):
+                    if exp_pdf.is_file() and safe_company.lower() in exp_pdf.name.lower():
+                        zf.write(exp_pdf, arcname=f"exports/{exp_pdf.name}")
+                        break
+
         return pkg_zip_path, filename
 
     def export_to_excel(self, report_data: dict, persons_repo=None) -> io.BytesIO:
@@ -397,27 +577,39 @@ class DataExchangeService:
     def export_full_backup_zip(self, data_root: Path) -> Tuple[Path, str]:
         """
         Crea una copia de seguridad integral (.caitbackup) de toda la base de datos,
-        borradores, plantillas y archivos adjuntos del sistema.
+        TODOS los borradores guardados, plantillas, archivos y PDFs adjuntos del sistema.
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"CAIT_Backup_Completo_{timestamp}.caitbackup"
         temp_dir = Path(tempfile.mkdtemp(prefix="cait_backup_"))
         backup_path = temp_dir / filename
 
+        drafts_list = [f.name for f in (data_root / "reports").glob("*.json")] if (data_root / "reports").exists() else []
+        databases_list = [f.name for f in (data_root / "databases").glob("*.json")] if (data_root / "databases").exists() else []
+        attachments_count = len([f for f in (data_root / "attachments").rglob("*") if f.is_file()]) if (data_root / "attachments").exists() else 0
+
         with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zf:
             meta = {
                 "backup_type": "FULL_SYSTEM_BACKUP",
                 "version": self.VERSION,
                 "created_at": datetime.now().isoformat(),
+                "drafts_count": len(drafts_list),
+                "drafts_list": drafts_list,
+                "databases_list": databases_list,
+                "attachments_count": attachments_count,
             }
             zf.writestr("backup_manifest.json", json.dumps(meta, indent=2))
 
             # Archivar todas las carpetas dentro de data_root
             for item in data_root.rglob("*"):
                 if item.is_file():
-                    # Evitar incluir la carpeta exports para no duplicar exports anteriores
                     rel_path = item.relative_to(data_root)
-                    if not str(rel_path).startswith("exports"):
+                    rel_str = str(rel_path).replace("\\", "/")
+                    # En exports, incluir solo los PDFs generados, evitando archivos ZIP o caitbackup antiguos
+                    if rel_str.startswith("exports"):
+                        if item.suffix.lower() == ".pdf":
+                            zf.write(item, arcname=f"data/{rel_path}")
+                    else:
                         zf.write(item, arcname=f"data/{rel_path}")
 
         return backup_path, filename
@@ -439,24 +631,33 @@ class DataExchangeService:
         """
         Importa un archivo (.cait, .json, o .caitpkg/.zip) y:
         1. Desempaqueta y normaliza los datos del reporte.
-        2. Registra el informe en data_root/reports/ (como actual y como borrador permanente).
-        3. Registra/actualiza automáticamente cada paciente en el catálogo maestro (persons.json).
-        4. Registra evaluadores y contrapartes nuevos si están presentes.
-        5. Extrae los adjuntos referenciados si es un paquete comprimido.
+        2. Si es una copia de seguridad (.caitbackup o ZIP de sistema), restaura todos los borradores y bases de datos automáticamente.
+        3. Restaura todos los adjuntos y PDFs que vengan en el paquete (físicos o embebidos en base64).
+        4. Restaura todos los borradores incluidos a data_root/reports/.
+        5. Registra el informe en data_root/reports/ (como actual y como borrador permanente).
+        6. Registra/actualiza automáticamente cada paciente en el catálogo maestro (persons.json).
+        7. Registra evaluadores y contrapartes nuevos si están presentes.
         """
         report_dict = {}
         associated_persons = []
         is_zip = False
+        attachments_restored = 0
+        drafts_restored = 0
 
-        # Detectar si es archivo ZIP/caitpkg
+        # Detectar si es archivo ZIP/caitpkg/caitbackup
         try:
             with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
                 is_zip = True
-                # Buscar manifest o json principal
                 namelist = zf.namelist()
+                
+                # Auto-detección: Si es un backup del sistema completo, procesar como tal
+                if "backup_manifest.json" in namelist or any(n.startswith("data/databases/") for n in namelist):
+                    return self.restore_system_backup(file_bytes, data_root, mode="merge")
+
+                # Buscar manifest o json principal
                 target_json = None
                 for n in namelist:
-                    if n in ("manifest.json", "report.json", "current_report.json") or n.endswith(".cait") or n.endswith(".json"):
+                    if n in ("manifest.json", "report.json", "current_report.json") or n.endswith(".cait") or (n.endswith(".json") and not n.startswith("drafts/")):
                         target_json = n
                         break
                 
@@ -473,16 +674,29 @@ class DataExchangeService:
                     else:
                         report_dict = pkg_data
                         
-                # Extraer adjuntos del ZIP si existen
+                # 1. Extraer TODOS los adjuntos del ZIP a data_root/attachments/
                 for name in namelist:
-                    if name.startswith("attachments/report_adjuntos/") and not name.endswith("/"):
-                        filename_only = os.path.basename(name)
-                        dest = data_root / "attachments" / "report_adjuntos" / filename_only
+                    if name.startswith("attachments/") and not name.endswith("/"):
+                        clean_sub = name[len("attachments/"):]
+                        dest = data_root / "attachments" / clean_sub
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         dest.write_bytes(zf.read(name))
-                    elif name.startswith("attachments/idoneidad/") and not name.endswith("/"):
-                        filename_only = os.path.basename(name)
-                        dest = data_root / "attachments" / "idoneidad" / filename_only
+                        attachments_restored += 1
+                        
+                # 2. Extraer TODOS los borradores incluidos en drafts/ a data_root/reports/
+                for name in namelist:
+                    if name.startswith("drafts/") and not name.endswith("/"):
+                        draft_name = os.path.basename(name)
+                        dest = data_root / "reports" / draft_name
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_bytes(zf.read(name))
+                        drafts_restored += 1
+
+                # 3. Extraer informes PDFs si vienen en exports/
+                for name in namelist:
+                    if name.startswith("exports/") and not name.endswith("/"):
+                        clean_sub = name[len("exports/"):]
+                        dest = data_root / "exports" / clean_sub
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         dest.write_bytes(zf.read(name))
 
@@ -497,6 +711,27 @@ class DataExchangeService:
                         associated_persons = pkg_data.get("associated_persons", [])
                     else:
                         report_dict = pkg_data
+                        
+                    # Extraer archivos/PDFs embebidos en base64 si existen
+                    for finfo in pkg_data.get("embedded_files", []):
+                        b64_data = finfo.get("b64")
+                        fname = finfo.get("name")
+                        category = finfo.get("category", "report_adjuntos")
+                        if b64_data and fname:
+                            dest = data_root / "attachments" / category / fname
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            dest.write_bytes(base64.b64decode(b64_data))
+                            attachments_restored += 1
+
+                    # Extraer borradores incluidos si existen
+                    for dinfo in pkg_data.get("saved_drafts", []):
+                        dname = dinfo.get("name")
+                        dcontent = dinfo.get("content")
+                        if dname and dcontent:
+                            dest = data_root / "reports" / dname
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            dest.write_text(json.dumps(dcontent, ensure_ascii=False, indent=4), encoding="utf-8")
+                            drafts_restored += 1
                 else:
                     return {"status": "error", "message": "Estructura JSON inválida para importar reporte."}
             except Exception as e:
@@ -591,13 +826,15 @@ class DataExchangeService:
 
         return {
             "status": "ok",
-            "message": f"¡Informe de '{company}' cargado y registrado exitosamente!",
+            "message": f"¡Informe de '{company}' cargado y registrado exitosamente! ({attachments_restored} archivos/PDFs y {drafts_restored + 1} borradores guardados)",
             "details": {
                 "draft_filename": draft_filename,
                 "company": company,
                 "total_audiometria": total_audio,
                 "total_espirometria": total_espiro,
                 "persons_registered": registered_count,
+                "attachments_restored": attachments_restored,
+                "drafts_restored": drafts_restored + 1,
                 "new_evaluators": new_evaluators_count,
                 "new_counterparts": new_counterparts_count,
             },
@@ -719,7 +956,8 @@ class DataExchangeService:
 
     def restore_system_backup(self, file_bytes: bytes, data_root: Path, mode: str = "merge") -> dict:
         """
-        Restaura o fusiona una copia de seguridad completa (.caitbackup/.zip) en el sistema.
+        Restaura o fusiona una copia de seguridad completa (.caitbackup/.zip) en el sistema,
+        restaurando íntegramente todos los borradores, archivos y PDFs adjuntos y bases de datos.
         """
         try:
             with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
@@ -731,16 +969,46 @@ class DataExchangeService:
                     return {"status": "error", "message": "El archivo seleccionado no es un backup válido de CAIT."}
 
                 restored_files = 0
+                restored_drafts = 0
+                restored_attachments = 0
+                restored_databases = set()
+                draft_names = []
+
                 for item in namelist:
                     if item == "backup_manifest.json" or item.endswith("/"):
                         continue
                     
                     # Remover prefijo data/ si existe
                     clean_rel = item[5:] if item.startswith("data/") else item
+                    clean_rel = clean_rel.replace("\\", "/")
                     target_path = data_root / clean_rel
                     
-                    if mode == "merge" and target_path.exists() and target_path.suffix == ".json":
-                        # Fusionar JSONs de bases de datos
+                    # Caso A: Borradores (reports/)
+                    if clean_rel.startswith("reports/"):
+                        target_path.parent.mkdir(parents=True, exist_ok=True)
+                        target_path.write_bytes(zf.read(item))
+                        restored_drafts += 1
+                        draft_names.append(target_path.name)
+                        restored_files += 1
+                        continue
+
+                    # Caso B: Archivos y PDFs adjuntos (attachments/)
+                    if clean_rel.startswith("attachments/"):
+                        target_path.parent.mkdir(parents=True, exist_ok=True)
+                        target_path.write_bytes(zf.read(item))
+                        restored_attachments += 1
+                        restored_files += 1
+                        continue
+
+                    # Caso C: Informes PDF generados (exports/)
+                    if clean_rel.startswith("exports/"):
+                        target_path.parent.mkdir(parents=True, exist_ok=True)
+                        target_path.write_bytes(zf.read(item))
+                        restored_files += 1
+                        continue
+
+                    # Caso D: Bases de datos (databases/) con modo fusión
+                    if clean_rel.startswith("databases/") and mode == "merge" and target_path.exists() and target_path.suffix == ".json":
                         try:
                             existing_data = json.loads(target_path.read_text(encoding="utf-8"))
                             backup_data = json.loads(zf.read(item).decode("utf-8"))
@@ -749,28 +1017,42 @@ class DataExchangeService:
                                 existing_data.update(backup_data)
                                 target_path.write_text(json.dumps(existing_data, ensure_ascii=False, indent=2), encoding="utf-8")
                             elif isinstance(existing_data, list) and isinstance(backup_data, list):
-                                # Evitar duplicados por id o name
-                                seen_ids = {x.get("id") or x.get("name") for x in existing_data if isinstance(x, dict)}
+                                seen_keys = set()
+                                for x in existing_data:
+                                    if isinstance(x, dict):
+                                        k = x.get("id") or x.get("identification") or x.get("name")
+                                        if k: seen_keys.add(str(k).strip().upper())
                                 for b_item in backup_data:
                                     if isinstance(b_item, dict):
-                                        key = b_item.get("id") or b_item.get("name")
-                                        if key not in seen_ids:
+                                        k = b_item.get("id") or b_item.get("identification") or b_item.get("name")
+                                        if not k or str(k).strip().upper() not in seen_keys:
                                             existing_data.append(b_item)
-                                            seen_ids.add(key)
+                                            if k: seen_keys.add(str(k).strip().upper())
                                 target_path.write_text(json.dumps(existing_data, ensure_ascii=False, indent=2), encoding="utf-8")
                             else:
                                 target_path.write_bytes(zf.read(item))
-                        except Exception:
+                            restored_databases.add(target_path.name)
+                        except Exception as e:
+                            print(f"Error fusionando base de datos {target_path}: {e}")
                             target_path.write_bytes(zf.read(item))
                     else:
                         target_path.parent.mkdir(parents=True, exist_ok=True)
                         target_path.write_bytes(zf.read(item))
+                        if clean_rel.startswith("databases/"):
+                            restored_databases.add(target_path.name)
                         
                     restored_files += 1
 
                 return {
                     "status": "ok",
-                    "message": f"Copia de seguridad restaurada con éxito ({restored_files} archivos procesados)."
+                    "message": f"Copia de seguridad restaurada exitosamente ({restored_drafts} borradores, {restored_attachments} archivos/PDFs adjuntos, {len(restored_databases)} bases de datos actualizadas).",
+                    "details": {
+                        "drafts_restored": restored_drafts,
+                        "attachments_restored": restored_attachments,
+                        "databases_merged": len(restored_databases),
+                        "total_files": restored_files,
+                        "draft_names": draft_names
+                    }
                 }
 
         except Exception as e:
