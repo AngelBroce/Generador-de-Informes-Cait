@@ -177,6 +177,13 @@ async def download_zip(filename: str):
 def read_root():
     return RedirectResponse(url="/presentacion/")
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def get_favicon():
+    icon_path = base_dir / "logo-apli-removebg-preview.ico"
+    if icon_path.exists():
+        return FileResponse(icon_path, media_type="image/x-icon")
+    return Response(status_code=204)
+
 # ================= API ENDPOINTS =================
 # Aqui irian los endpoints que conectan con src.services.*
 
