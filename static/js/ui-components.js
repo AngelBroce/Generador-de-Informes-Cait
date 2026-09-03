@@ -652,14 +652,16 @@ function initDataExchangeModal() {
 window.downloadExchangeFile = function(endpointUrl, defaultFilename) {
   if (window.showToast) window.showToast('Generando archivo...');
   
-  const iframe = document.createElement('iframe');
-  iframe.style.display = 'none';
-  iframe.src = endpointUrl;
-  document.body.appendChild(iframe);
+  const a = document.createElement('a');
+  a.href = endpointUrl;
+  if (defaultFilename) a.setAttribute('download', defaultFilename);
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
   setTimeout(() => {
-    document.body.removeChild(iframe);
-    if (window.showToast) window.showToast('Descarga iniciada ✓');
-  }, 2000);
+    try { document.body.removeChild(a); } catch(e) {}
+    if (window.showToast) window.showToast('Descarga iniciada ✓ (Guardado en tu carpeta de Descargas)');
+  }, 1000);
 };
 
 window.openDataExchangeModal = function() {
