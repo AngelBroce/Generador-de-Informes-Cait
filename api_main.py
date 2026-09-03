@@ -68,6 +68,7 @@ import tempfile
 import shutil
 from datetime import datetime
 import ctypes
+import subprocess
 from typing import Optional, List, Dict
 
 
@@ -799,6 +800,113 @@ async def export_system_backup():
     """Genera y descarga una copia de seguridad íntegra de toda la aplicación (.caitbackup)."""
     backup_path, filename = data_exchange_service.export_full_backup_zip(data_root)
     return FileResponse(path=backup_path, filename=filename, media_type="application/octet-stream")
+
+def get_downloads_folder() -> Path:
+    """Obtiene la ruta real de la carpeta Descargas de Windows del usuario."""
+    try:
+        import winreg
+        sub_key = r'SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders'
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, sub_key) as key:
+            raw_val, _ = winreg.QueryValueEx(key, '{374DE290-123F-4565-9164-39C4925E467B}')
+            p = Path(os.path.expandvars(raw_val))
+            if p.exists():
+                return p
+    except Exception:
+        pass
+    dl = Path.home() / "Downloads"
+    dl.mkdir(parents=True, exist_ok=True)
+    return dl
+
+@app.post("/api/export/save-to-disk")
+async def save_export_to_disk(request: Request):
+    """Genera y guarda el archivo de exportación directamente en la carpeta de Descargas del sistema."""
+    body = await request.json()
+    export_type = str(body.get("type", "cait")).lower()
+    
+    if not REPORT_DATA_FILE.exists():
+        raise HTTPException(status_code=404, detail="No hay datos de informe disponibles para exportar.")
+    with open(REPORT_DATA_FILE, "r", encoding="utf-8") as f:
+        data = normalize_report(json.load(f))
+    
+    safe_company = sanitize_filename_ascii(data.get("company_name"), "Informe")
+    dl_dir = get_downloads_folder()
+    exports_dir = data_root / "exports"
+    exports_dir.mkdir(parents=True, exist_ok=True)
+    
+    if export_type in ("cait", "informe.cait"):
+        pkg = data_exchange_service.export_report_cait(
+            data, data_root=data_root, persons_repo=persons_repo,
+            include_files=True, include_drafts=True
+        )
+        filename = f"CAIT_{safe_company}_{datetime.now().strftime('%Y%m%d')}.cait"
+        content = json.dumps(pkg, ensure_ascii=False, indent=2).encode("utf-8")
+        target_path = dl_dir / filename
+        target_path.write_bytes(content)
+        (exports_dir / filename).write_bytes(content)
+        
+    elif export_type in ("caitpkg", "caso_completo.caitpkg"):
+        zip_path, filename = data_exchange_service.export_report_package_zip(
+            data, data_root=data_root, persons_repo=persons_repo, include_drafts=True
+        )
+        target_path = dl_dir / filename
+        shutil.copy2(zip_path, target_path)
+        shutil.copy2(zip_path, exports_dir / filename)
+        
+    elif export_type in ("excel", "xlsx", "informe.xlsx"):
+        filename = f"Informe_CAIT_{safe_company}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        excel_stream = data_exchange_service.export_to_excel(data, persons_repo=persons_repo)
+        content = excel_stream.getvalue()
+        target_path = dl_dir / filename
+        target_path.write_bytes(content)
+        (exports_dir / filename).write_bytes(content)
+        
+    elif export_type in ("csv", "resultados.csv"):
+        tipo = body.get("target_test_type", "all")
+        filename = f"Resultados_CAIT_{safe_company}_{tipo}_{datetime.now().strftime('%Y%m%d')}.csv"
+        csv_text = data_exchange_service.export_to_csv(data, test_type=tipo)
+        content = csv_text.encode("utf-8-sig")
+        target_path = dl_dir / filename
+        target_path.write_bytes(content)
+        (exports_dir / filename).write_bytes(content)
+        
+    elif export_type in ("backup", "caitbackup", "backup.caitbackup"):
+        backup_path, filename = data_exchange_service.export_full_backup_zip(data_root)
+        target_path = dl_dir / filename
+        shutil.copy2(backup_path, target_path)
+        shutil.copy2(backup_path, exports_dir / filename)
+        
+    else:
+        raise HTTPException(status_code=400, detail=f"Tipo de exportación '{export_type}' desconocido.")
+        
+    size_bytes = target_path.stat().st_size
+    return {
+        "status": "ok",
+        "filename": filename,
+        "file_path": str(target_path.resolve()),
+        "folder_path": str(dl_dir.resolve()),
+        "size_kb": round(size_bytes / 1024, 1)
+    }
+
+@app.post("/api/system/open-explorer")
+async def open_in_explorer(request: Request):
+    """Abre el explorador de archivos de Windows resaltando el archivo o carpeta indicado."""
+    body = await request.json()
+    path_str = body.get("path")
+    if not path_str:
+        path_str = str(get_downloads_folder())
+    target = Path(path_str)
+    try:
+        if target.exists():
+            if target.is_file():
+                subprocess.Popen(["explorer.exe", f"/select,{target.resolve()}"])
+            else:
+                subprocess.Popen(["explorer.exe", str(target.resolve())])
+        else:
+            parent = target.parent if target.parent.exists() else get_downloads_folder()
+            subprocess.Popen(["explorer.exe", str(parent.resolve())])
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.post("/api/import/cait")
 async def import_cait_file(file: UploadFile = File(...)):

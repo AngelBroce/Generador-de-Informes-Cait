@@ -329,6 +329,24 @@ function initDataExchangeModal() {
           
           <!-- PANEL DE EXPORTACIÓN -->
           <div id="panel-export" class="space-y-4">
+
+            <!-- Alerta interactiva de descarga con botón de abrir en explorador de Windows -->
+            <div id="exchange-export-alert" class="hidden p-4 rounded-xl border border-primary/40 bg-primary/10 text-on-surface text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm animate-in fade-in duration-200">
+              <div class="flex items-center gap-3">
+                <span class="material-symbols-outlined text-primary shrink-0" style="font-size:26px;">check_circle</span>
+                <div>
+                  <div class="font-bold text-primary text-sm" id="export-alert-title">¡Archivo guardado con éxito!</div>
+                  <div class="text-xs font-mono text-on-surface font-semibold mt-0.5" id="export-alert-filename">nombre_archivo</div>
+                  <div class="text-[11px] text-outline mt-0.5" id="export-alert-path">Guardado en tu carpeta de Descargas</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <button id="btn-open-export-folder" class="px-3.5 py-2 bg-primary text-on-primary rounded-lg font-bold text-xs hover:opacity-90 flex items-center gap-1.5 shadow-sm transition-all">
+                  <span class="material-symbols-outlined" style="font-size:16px;">folder_open</span> Abrir Carpeta
+                </button>
+              </div>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               
               <!-- Card: CAIT Portable Case -->
@@ -649,19 +667,71 @@ function initDataExchangeModal() {
 }
 
 // Función global de descarga de archivos de intercambio
-window.downloadExchangeFile = function(endpointUrl, defaultFilename) {
-  if (window.showToast) window.showToast('Generando archivo...');
-  
-  const a = document.createElement('a');
-  a.href = endpointUrl;
-  if (defaultFilename) a.setAttribute('download', defaultFilename);
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    try { document.body.removeChild(a); } catch(e) {}
-    if (window.showToast) window.showToast('Descarga iniciada ✓ (Guardado en tu carpeta de Descargas)');
-  }, 1000);
+window.downloadExchangeFile = async function(endpointOrType, defaultFilename) {
+  let exportType = 'cait';
+  const str = (endpointOrType || '').toLowerCase();
+  if (str.includes('caitpkg')) exportType = 'caitpkg';
+  else if (str.includes('cait')) exportType = 'cait';
+  else if (str.includes('excel') || str.includes('xlsx')) exportType = 'excel';
+  else if (str.includes('csv')) exportType = 'csv';
+  else if (str.includes('backup')) exportType = 'backup';
+
+  const alertBox = document.getElementById('exchange-export-alert');
+  const alertTitle = document.getElementById('export-alert-title');
+  const alertFilename = document.getElementById('export-alert-filename');
+  const alertPath = document.getElementById('export-alert-path');
+  const btnOpen = document.getElementById('btn-open-export-folder');
+
+  if (alertBox) {
+    alertBox.classList.remove('hidden');
+    alertBox.className = "p-4 rounded-xl border border-primary/40 bg-primary/10 text-on-surface text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm animate-in fade-in duration-200";
+    if (alertTitle) alertTitle.innerHTML = '<span class="material-symbols-outlined animate-spin align-middle mr-1" style="font-size:16px;">progress_activity</span> Generando archivo y guardando en Descargas...';
+    if (alertFilename) alertFilename.textContent = defaultFilename || 'procesando...';
+    if (alertPath) alertPath.textContent = 'Guardando directamente en tu carpeta de Descargas de Windows...';
+    if (btnOpen) btnOpen.classList.add('hidden');
+  }
+
+  if (window.showToast) window.showToast('Generando y guardando archivo...');
+
+  try {
+    const res = await fetch('/api/export/save-to-disk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: exportType })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.status === 'ok') {
+      if (alertBox) {
+        if (alertTitle) alertTitle.innerHTML = '¡Archivo guardado con éxito!';
+        if (alertFilename) alertFilename.textContent = data.filename;
+        if (alertPath) alertPath.innerHTML = `Guardado en: <strong class="text-primary break-all">${data.file_path}</strong>`;
+        if (btnOpen) {
+          btnOpen.classList.remove('hidden');
+          btnOpen.onclick = async () => {
+            await fetch('/api/system/open-explorer', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ path: data.file_path })
+            });
+          };
+        }
+      }
+      if (window.showToast) window.showToast(`¡Archivo guardado en Descargas: ${data.filename}! ✓`);
+    } else {
+      throw new Error(data.message || data.detail || 'Error al guardar archivo');
+    }
+  } catch (err) {
+    console.error('Error guardando archivo en disco:', err);
+    if (alertBox) {
+      alertBox.className = "p-4 rounded-xl border border-error/40 bg-error/10 text-error text-xs flex items-center gap-2";
+      if (alertTitle) alertTitle.textContent = 'Error al exportar archivo';
+      if (alertFilename) alertFilename.textContent = err.message;
+      if (alertPath) alertPath.textContent = 'Inténtelo nuevamente o revise la consola.';
+      if (btnOpen) btnOpen.classList.add('hidden');
+    }
+    if (window.showToast) window.showToast('Error al exportar archivo', 'error');
+  }
 };
 
 window.openDataExchangeModal = function() {
@@ -680,6 +750,14 @@ function injectStyles() {
     main { animation: fadeIn 0.15s ease-out; }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     .btn-loading { opacity: 0.7; pointer-events: none; }
+    .toast {
+      z-index: 100000 !important;
+      background: #00450d !important;
+      color: #ffffff !important;
+      border: 1px solid rgba(255,255,255,0.4) !important;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6) !important;
+      font-weight: 700 !important;
+    }
   `;
   document.head.appendChild(style);
 }
