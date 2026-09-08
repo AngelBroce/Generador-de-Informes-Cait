@@ -51,3 +51,18 @@ installer/output/
 *.log
 err.txt
 *.zip
+*.exe
+Informe_*.pdf
+test_adjunto.pdf
+extract_*.py
+
+# Entorno de Desarrollo Local, Agentes y Arquitectura (No enviar a GitHub)
+.agents/
+.obsidian/
+*.canvas
+*.md
+.foam/
+KNOWLEDGE_GRAPH.svg
+scripts/pencil_mcp.py
+scripts/generate_deep_obsidian_graph.py
+scripts/generate_graph_svg.py

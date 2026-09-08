@@ -174,6 +174,13 @@ async def download_zip(filename: str):
         return FileResponse(path=file_path, filename=filename, media_type='application/zip')
     return {"status": "error", "message": "File not found"}
 
+@app.get("/graph")
+def get_knowledge_graph_view():
+    graph_file = base_dir / ".agents" / "knowledge_graph" / "graph_viewer.html"
+    if graph_file.exists():
+        return FileResponse(graph_file)
+    return {"status": "error", "message": "Graph viewer not found"}
+
 @app.get("/")
 def read_root():
     return RedirectResponse(url="/presentacion/")
@@ -547,6 +554,24 @@ async def save_report(request: Request):
     target = data_root / "reports" / name
     target.parent.mkdir(parents=True, exist_ok=True)
     
+    # Preservar datos críticos de disco si el guardado parcial viene incompleto
+    if target.exists():
+        try:
+            with open(target, "r", encoding="utf-8") as f:
+                disk_data = json.load(f)
+            if isinstance(disk_data, dict):
+                for list_k in ["resultados_audiometria", "resultados_espirometria"]:
+                    if not data.get(list_k) and disk_data.get(list_k):
+                        data[list_k] = disk_data[list_k]
+                if disk_data.get("adjuntos") and isinstance(disk_data["adjuntos"], list):
+                    existing_adj = {a.get("name"): a for a in disk_data["adjuntos"] if isinstance(a, dict) and a.get("name")}
+                    for a in data.get("adjuntos", []):
+                        if isinstance(a, dict) and a.get("name"):
+                            existing_adj[a["name"]] = a
+                    data["adjuntos"] = list(existing_adj.values())
+        except Exception as e:
+            print(f"Advertencia al fusionar con disco en save_report: {e}")
+            
     # Si es el guardado automático o el actual, también actualizar current_report.json
     with open(target, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
@@ -1177,7 +1202,7 @@ if __name__ == "__main__":
     # Iniciar ventana principal
     icon_path = str(Path(__file__).parent / 'logo-apli-removebg-preview.ico')
     window = webview.create_window(
-        'CAIT Panamá - Generador de Informes v2.3.0', 
+        'CAIT Panamá - Generador de Informes v2.3.2', 
         'http://127.0.0.1:8000', 
         width=1360, 
         height=900, 

@@ -3,6 +3,65 @@
  * Generates consistent sidebar, header, and Data Exchange modal (Import/Export no-PDF).
  */
 
+// ── PROTECCIÓN GLOBAL CONTRA MANIPULACIÓN DURANTE CARGA DE BORRADORES ──
+window.isDraftLoading = false;
+
+window.showLoadingBlocker = function(title = "Cargando borrador...", subtitle = "Por favor espere. La interfaz está bloqueada para proteger los datos médicos.") {
+  window.isDraftLoading = true;
+  let el = document.getElementById('global-loading-blocker');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'global-loading-blocker';
+    el.className = 'fixed inset-0 bg-black/70 backdrop-blur-sm z-[999999] flex flex-col items-center justify-center select-none';
+    el.innerHTML = `
+      <div class="bg-surface p-8 rounded-2xl shadow-2xl border border-outline-variant flex flex-col items-center gap-4 max-w-sm text-center mx-4">
+        <div class="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+        <div>
+          <h3 id="global-loading-title" class="font-bold text-on-surface text-base">Cargando...</h3>
+          <p id="global-loading-subtitle" class="text-xs text-outline mt-1.5 leading-relaxed">Por favor espere. La interfaz está bloqueada para proteger los datos.</p>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(el);
+  }
+  const titleEl = document.getElementById('global-loading-title');
+  const subtitleEl = document.getElementById('global-loading-subtitle');
+  if (titleEl) titleEl.textContent = title;
+  if (subtitleEl) subtitleEl.textContent = subtitle;
+  el.style.display = 'flex';
+  document.body.style.pointerEvents = 'none';
+  el.style.pointerEvents = 'all';
+};
+
+window.hideLoadingBlocker = function() {
+  window.isDraftLoading = false;
+  const el = document.getElementById('global-loading-blocker');
+  if (el) el.style.display = 'none';
+  document.body.style.pointerEvents = '';
+};
+
+// Interceptar fetch para bloquear llamadas de autoguardado concurrentes o prematuras durante la carga
+const _originalFetch = window.fetch;
+window.fetch = function(url, options) {
+  const isPostReport = (typeof url === 'string' && url.includes('/api/report') && options && options.method === 'POST');
+  if (window.isDraftLoading && isPostReport && (!options || !options._allowDuringLoading)) {
+    console.warn('[CAIT] Guardado bloqueado automáticamente: se está cargando un borrador en segundo plano.');
+    return Promise.resolve(new Response(JSON.stringify({ status: "blocked_during_loading" }), { status: 200 }));
+  }
+  return _originalFetch.apply(this, arguments);
+};
+
+// Evitar que inputs en DOM recién montado disparen autoguardados durante los primeros 800ms
+window.isDraftLoading = true;
+window.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    const el = document.getElementById('global-loading-blocker');
+    if (!el || el.style.display === 'none') {
+      window.isDraftLoading = false;
+    }
+  }, 800);
+});
+
 const sidebarLinks = [
   { href: "/presentacion/index.html", text: "Presentación del informe", icon: "description" },
   { href: "/resultados/index.html", text: "Resultados de las pruebas", icon: "science" },
@@ -23,7 +82,7 @@ function initSidebar() {
   let html = `
     <div class="px-6 mb-8">
       <h2 class="text-primary font-bold text-lg leading-tight cursor-pointer select-none" ondblclick="toggleConsole()">CAIT Panamá</h2>
-      <p class="text-on-surface-variant text-sm">Generador de Informes <span class="bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded ml-1 font-bold cursor-pointer select-none" ondblclick="toggleConsole()">v2.3.0</span></p>
+      <p class="text-on-surface-variant text-sm">Generador de Informes <span class="bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded ml-1 font-bold cursor-pointer select-none" ondblclick="toggleConsole()">v2.3.2</span></p>
     </div>
     <nav class="flex-1 px-2 space-y-1">
   `;
@@ -225,18 +284,50 @@ function initGlobalButtons() {
             <button class="btn-open px-4 py-2 bg-primary text-on-primary rounded-lg font-bold text-sm">Abrir</button>
           </div>
         `;
-        item.querySelector('.btn-open').onclick = async () => {
-          if (window.showToast) window.showToast(`Cargando ${d.name}...`);
-          const rRes = await fetch(`/api/report?name=${d.name}`);
-          const data = await rRes.json();
-          await fetch('/api/report', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+        item.querySelector('.btn-open').onclick = async (e) => {
+          e.stopPropagation();
+          const draftName = d.name;
+          
+          window.showLoadingBlocker(
+            `Cargando "${draftName}"...`,
+            'Bloqueando interfaz mientras se carga y verifica toda la información médica. Por favor espere...'
+          );
+          
+          // Deshabilitar todos los botones del modal para evitar clics dobles
+          document.querySelectorAll('#drafts-list button, #modal-load-draft button').forEach(b => {
+            b.disabled = true;
+            b.classList.add('opacity-50', 'cursor-not-allowed');
           });
-          if (window.loadData) window.loadData();
-          else location.reload();
-          modalLoad.classList.add('hidden');
+
+          try {
+            const rRes = await fetch(`/api/report?name=${encodeURIComponent(draftName)}`);
+            if (!rRes.ok) throw new Error('No se pudo cargar el borrador');
+            const data = await rRes.json();
+            
+            // Activar en el servidor permitiendo la llamada interna
+            const pRes = await fetch('/api/report', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(data),
+              _allowDuringLoading: true
+            });
+            if (!pRes.ok) throw new Error('No se pudo activar el reporte');
+            
+            if (window.showToast) window.showToast(`Borrador "${draftName}" cargado correctamente ✓`);
+            
+            // Recargar completamente la página para que todos los campos y tablas se actualicen limpios
+            setTimeout(() => {
+              location.reload();
+            }, 400);
+          } catch(err) {
+            console.error('Error al abrir borrador:', err);
+            window.hideLoadingBlocker();
+            document.querySelectorAll('#drafts-list button, #modal-load-draft button').forEach(b => {
+              b.disabled = false;
+              b.classList.remove('opacity-50', 'cursor-not-allowed');
+            });
+            if (window.showToast) window.showToast(`Error al cargar: ${err.message}`, 'error');
+          }
         };
         item.querySelector('.btn-delete').onclick = async (e) => {
           e.stopPropagation();
@@ -363,34 +454,6 @@ function initDataExchangeModal() {
                 </button>
               </div>
 
-              <!-- Card: Excel XLSX -->
-              <div class="p-4 border border-outline-variant rounded-xl bg-surface-container-low hover:border-primary transition-all flex flex-col justify-between">
-                <div>
-                  <div class="flex items-center gap-2 text-secondary font-bold text-sm mb-1">
-                    <span class="material-symbols-outlined" style="font-size:20px;">table_view</span>
-                    Libro de Excel (.xlsx)
-                  </div>
-                  <p class="text-xs text-outline mb-3">Exporta tablas con hojas separadas de Audiometría, Espirometría, Resumen y Catálogo de Pacientes con formato profesional.</p>
-                </div>
-                <button onclick="downloadExchangeFile('/api/export/excel', 'informe.xlsx')" class="w-full py-2 px-3 bg-secondary text-on-secondary rounded-lg text-xs font-bold hover:opacity-90 flex items-center justify-center gap-1.5 shadow-sm">
-                  <span class="material-symbols-outlined" style="font-size:16px;">table_chart</span> Descargar .xlsx
-                </button>
-              </div>
-
-              <!-- Card: CSV Estándar -->
-              <div class="p-4 border border-outline-variant rounded-xl bg-surface-container-low hover:border-primary transition-all flex flex-col justify-between">
-                <div>
-                  <div class="flex items-center gap-2 text-on-surface font-bold text-sm mb-1">
-                    <span class="material-symbols-outlined" style="font-size:20px;">csv</span>
-                    Resultados en CSV (.csv)
-                  </div>
-                  <p class="text-xs text-outline mb-3">Exporta el listado de personas y resultados en texto delimitado por comas con codificación UTF-8 para otras bases de datos.</p>
-                </div>
-                <button onclick="downloadExchangeFile('/api/export/csv', 'resultados.csv')" class="w-full py-2 px-3 bg-surface-container-highest text-on-surface border border-outline rounded-lg text-xs font-bold hover:bg-surface-container-high flex items-center justify-center gap-1.5">
-                  <span class="material-symbols-outlined" style="font-size:16px;">file_download</span> Descargar .csv
-                </button>
-              </div>
-
               <!-- Card: Paquete con Adjuntos -->
               <div class="p-4 border border-outline-variant rounded-xl bg-surface-container-low hover:border-primary transition-all flex flex-col justify-between">
                 <div>
@@ -427,13 +490,13 @@ function initDataExchangeModal() {
             
             <!-- Zona Dropzone -->
             <div id="exchange-dropzone" class="border-2 border-dashed border-outline-variant rounded-2xl p-8 text-center bg-surface-container-lowest hover:bg-surface-container-low hover:border-primary transition-all cursor-pointer">
-              <input type="file" id="exchange-file-input" class="hidden" accept=".cait,.caitpkg,.json,.xlsx,.xls,.csv,.caitbackup,.zip"/>
+              <input type="file" id="exchange-file-input" class="hidden" accept=".cait,.caitpkg,.json,.caitbackup,.zip"/>
               <span class="material-symbols-outlined text-primary mb-2" style="font-size:48px;">cloud_upload</span>
               <h4 class="font-bold text-sm text-primary mb-1">Arrastra aquí tu archivo o haz clic para seleccionar</h4>
-              <p class="text-xs text-outline max-w-md mx-auto">Soporta archivos <strong>.cait, .caitpkg, .json, .xlsx, .csv, .caitbackup</strong>. La aplicación leerá los datos y los registrará automáticamente en la base de datos.</p>
+              <p class="text-xs text-outline max-w-md mx-auto">Soporta archivos <strong>.cait, .caitpkg, .caitbackup</strong>. La aplicación leerá los datos y los registrará automáticamente en la base de datos.</p>
               <div id="exchange-file-selected" class="mt-4 hidden items-center justify-center gap-2 text-xs font-bold text-primary bg-primary/10 py-1.5 px-3 rounded-lg w-fit mx-auto">
                 <span class="material-symbols-outlined" style="font-size:16px;">check_circle</span>
-                <span id="exchange-file-name">archivo.xlsx</span>
+                <span id="exchange-file-name">archivo.cait</span>
               </div>
             </div>
 
@@ -471,7 +534,7 @@ function initDataExchangeModal() {
 
         <!-- Footer del Modal -->
         <div class="px-6 py-3 bg-surface-container-low border-t border-outline-variant flex justify-between items-center text-xs text-outline">
-          <span>CAIT Informes v2.3.0 • Sistema de Migración e Integración</span>
+          <span>CAIT Informes v2.3.2 • Sistema de Migración e Integración</span>
           <button id="btn-cancel-exchange" class="px-4 py-2 rounded-lg hover:bg-surface-container-high text-outline font-bold">Cerrar</button>
         </div>
 

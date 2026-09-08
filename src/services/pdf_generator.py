@@ -67,11 +67,22 @@ class PDFGenerator:
             pdf_canvas = canvas.Canvas(temp_pdf_path, pagesize=landscape(letter))
 
             watermark_logo = logo_path if logo_path and os.path.exists(logo_path) else None
+            if not watermark_logo:
+                for cand in [
+                    Path(__file__).parent.parent / "assets" / "logo_cait.png",
+                    Path.cwd() / "src" / "assets" / "logo_cait.png",
+                    Path.cwd() / "static" / "logo.png",
+                    Path.cwd() / "logo-apli-removebg-preview.png",
+                ]:
+                    if cand.exists():
+                        watermark_logo = str(cand)
+                        break
+
             if watermark_logo:
                 self._add_watermark_logo(pdf_canvas, watermark_logo)
 
             # 1. PORTADA / PRESENTACIÓN (Página 1)
-            self._draw_header(pdf_canvas, report_data)
+            self._draw_header(pdf_canvas, report_data, logo_path=watermark_logo)
             self._draw_footer(pdf_canvas, page_number=1)
             
             # 2. TABLA DE CONTENIDOS (Página 2+)
@@ -324,20 +335,20 @@ class PDFGenerator:
                 os.remove(temp_pdf_path)
 
     def _add_watermark_logo(self, canvas_obj: canvas.Canvas, logo_path: str) -> None:
-        """Coloca el logo de fondo con opacidad muy baja."""
+        """Coloca el logo de fondo con opacidad suave y equilibrada."""
 
         try:
             import tempfile
             img = Image.open(logo_path)
 
-            max_width = self.page_width * 0.60
+            max_width = self.page_width * 0.72
             ratio = max_width / img.width
             new_height = int(img.height * ratio)
             img = img.resize((int(max_width), new_height), Image.Resampling.LANCZOS)
 
             img = img.convert("RGBA")
             alpha = img.split()[3]
-            alpha = alpha.point(lambda p: int(p * 0.08))
+            alpha = alpha.point(lambda p: int(p * 0.16))
             img.putalpha(alpha)
 
             # Usar archivo temporal seguro (funciona en el .exe compilado)
@@ -362,43 +373,87 @@ class PDFGenerator:
         except Exception as exc:  # pragma: no cover
             print(f"Error al agregar watermark: {exc}")
 
-    def _draw_header_branding(self, pdf_canvas: canvas.Canvas, report_data: Dict) -> float:
-        """Dibuja el encabezado superior con logo y datos de contacto."""
+    def _draw_header_branding(self, pdf_canvas: canvas.Canvas, report_data: Dict, logo_path: Optional[str] = None) -> float:
+        """Dibuja el encabezado superior con logo institucional y datos de contacto optimizado para orientación horizontal."""
 
-        y = self.page_height - self.top_margin
+        top_y = self.page_height - 0.44 * inch
+        center_x = self.page_width / 2
 
+        # Resolver logo si no viene explícito
+        if not logo_path:
+            for cand in [
+                Path(__file__).parent.parent / "assets" / "logo_cait.png",
+                Path.cwd() / "src" / "assets" / "logo_cait.png",
+                Path.cwd() / "static" / "logo.png",
+                Path.cwd() / "logo-apli-removebg-preview.png",
+            ]:
+                if cand.exists():
+                    logo_path = str(cand)
+                    break
+
+        logo_w = 108
+        logo_h = logo_w * (903 / 1265)
+        text_bottom = top_y - 0.52 * inch
+        text_center_y = (top_y + text_bottom) / 2
+        logo_x = self.left_margin - 8
+        logo_y = text_center_y - (logo_h / 2)
+
+        # Dibujar logo institucional a color en la esquina superior izquierda si está disponible
+        if logo_path and os.path.exists(logo_path):
+            try:
+                pdf_canvas.drawImage(
+                    ImageReader(logo_path),
+                    logo_x,
+                    logo_y,
+                    width=logo_w,
+                    height=logo_h,
+                    mask="auto",
+                    preserveAspectRatio=True,
+                )
+            except Exception as exc:
+                print(f"Aviso al dibujar logo en membrete: {exc}")
+
+        y = top_y
         pdf_canvas.setFont("Helvetica-Bold", 11)
+        pdf_canvas.setFillColor(colors.HexColor("#1B5E20"))
         pdf_canvas.drawCentredString(
-            self.page_width / 2,
+            center_x,
             y,
             "CENTRO DE ATENCIÓN INTEGRAL TERAPÉUTICO PANAMÁ (CAIT PANAMÁ)",
         )
 
-        y -= 0.35 * inch
+        y -= 0.20 * inch
         pdf_canvas.setFont("Helvetica", 8)
-        pdf_canvas.drawCentredString(self.page_width / 2, y, "Ruc.: 8-749-2471 B.V. 17")
+        pdf_canvas.setFillColor(colors.HexColor("#334155"))
+        pdf_canvas.drawCentredString(center_x, y, "Ruc.: 8-749-2471 B.V. 17")
 
-        y -= 0.25 * inch
+        y -= 0.16 * inch
         pdf_canvas.drawCentredString(
-            self.page_width / 2,
+            center_x,
             y,
             "Teléfono : 6022-9400 / 6671-4015 correo electrónico: caitpanama@gmail.com",
         )
 
-        y -= 0.25 * inch
-        pdf_canvas.setFont("Helvetica", 7)
+        y -= 0.16 * inch
+        pdf_canvas.setFont("Helvetica", 7.5)
         pdf_canvas.drawCentredString(
-            self.page_width / 2,
+            center_x,
             y,
             "La Chorrera, Plaza Mitsue, planta baja posterior diagonal a los Bomberos, local 3, calle de la Leopoldo Castillo.",
         )
 
-        return y
+        # Línea divisoria tenue ubicada debajo tanto del texto como del logo
+        line_y = min(y - 0.14 * inch, logo_y - 6)
+        pdf_canvas.setLineWidth(0.75)
+        pdf_canvas.setStrokeColor(colors.HexColor("#CBD5E1"))
+        pdf_canvas.line(self.page_width * 0.10, line_y, self.page_width * 0.90, line_y)
 
-    def _draw_header(self, pdf_canvas: canvas.Canvas, report_data: Dict) -> None:
-        """Dibuja la portada del informe siguiendo estrictamente el diseño de la imagen de referencia."""
+        return line_y
 
-        y = self._draw_header_branding(pdf_canvas, report_data)
+    def _draw_header(self, pdf_canvas: canvas.Canvas, report_data: Dict, logo_path: Optional[str] = None) -> None:
+        """Dibuja la portada del informe en orientación horizontal con distribución equilibrada y fecha al final."""
+
+        y = self._draw_header_branding(pdf_canvas, report_data, logo_path=logo_path)
         center_x = self.page_width / 2
         accent_color = colors.HexColor("#1B5E20")
 
@@ -413,7 +468,7 @@ class PDFGenerator:
             canvas_obj.line(cx - w/2, y_pos - 2, cx + w/2, y_pos - 2)
 
         # 1. INFORME:
-        y -= 0.40 * inch
+        y -= 0.38 * inch
         draw_underlined_label(pdf_canvas, "INFORME:", center_x, y)
 
         # 2. TIPO DE EVALUACIÓN
@@ -431,34 +486,36 @@ class PDFGenerator:
             else: report_type_text += "S"
         
         pdf_canvas.setFont("Helvetica-Bold", 12)
-        pdf_canvas.setFillColor(accent_color)
+        pdf_canvas.setFillColor(colors.HexColor("#0F172A"))
         pdf_canvas.drawCentredString(center_x, y, report_type_text)
 
         # 3. EMPRESA:
-        y -= 0.35 * inch
+        y -= 0.38 * inch
         draw_underlined_label(pdf_canvas, "EMPRESA:", center_x, y)
 
         # 4. NOMBRE DE EMPRESA
         y -= 0.20 * inch
         company_name = (report_data.get("company_name") or report_data.get("company") or "N/A").strip()
         pdf_canvas.setFont("Helvetica-Bold", 12)
+        pdf_canvas.setFillColor(colors.HexColor("#0F172A"))
         pdf_canvas.drawCentredString(center_x, y, company_name.upper())
 
         # 5. ESTUDIO OCUPACIONAL:
-        y -= 0.35 * inch
+        y -= 0.38 * inch
         draw_underlined_label(pdf_canvas, "ESTUDIO OCUPACIONAL:", center_x, y)
 
         # 6. LOCALIZACIÓN / PLANTA
         y -= 0.20 * inch
         location = (report_data.get("location") or "N/A").strip()
         pdf_canvas.setFont("Helvetica-Bold", 12)
+        pdf_canvas.setFillColor(colors.HexColor("#0F172A"))
         pdf_canvas.drawCentredString(center_x, y, location.upper())
 
         # 7. PREPARADO POR:
-        y -= 0.35 * inch
+        y -= 0.46 * inch
         draw_underlined_label(pdf_canvas, "PREPARADO POR:", center_x, y)
 
-        # 8. BLOQUE DE EVALUADORES
+        # 8. BLOQUE DE EVALUADORES (con separación amplia respecto a PREPARADO POR:)
         technical_team = self._resolve_technical_team(report_data)
         
         def _draw_member_card(member: Dict, cx: float, top_y: float):
@@ -470,24 +527,28 @@ class PDFGenerator:
             pdf_canvas.setFillColor(accent_color)
             pdf_canvas.drawCentredString(cx, line_y, name)
             
-            pdf_canvas.setFont("Helvetica-Bold", 10)
+            pdf_canvas.setFont("Helvetica-Bold", 9.5)
+            pdf_canvas.setFillColor(colors.HexColor("#334155"))
             for detail in details[:2]:
                 line_y -= 0.16 * inch
                 pdf_canvas.drawCentredString(cx, line_y, detail)
+            return line_y
 
-        y -= 0.20 * inch
+        eval_top_y = y - 0.44 * inch
         if len(technical_team) >= 2:
-            _draw_member_card(technical_team[0], self.page_width * 0.25, y)
-            _draw_member_card(technical_team[1], self.page_width * 0.75, y)
-            y -= 0.30 * inch
+            _draw_member_card(technical_team[0], self.page_width * 0.28, eval_top_y)
+            last_card_y = _draw_member_card(technical_team[1], self.page_width * 0.72, eval_top_y)
+            y = last_card_y
         else:
             member = technical_team[0] if technical_team else {}
             if member:
-                _draw_member_card(member, center_x, y)
-                y -= 0.30 * inch
+                last_card_y = _draw_member_card(member, center_x, eval_top_y)
+                y = last_card_y
+            else:
+                y = eval_top_y
 
         # 9. CONTRAPARTE TÉCNICA:
-        y -= 0.20 * inch
+        y -= 0.44 * inch
         draw_underlined_label(pdf_canvas, "CONTRAPARTE TECNICA:", center_x, y)
 
         # 10. VALOR CONTRAPARTE
@@ -496,14 +557,17 @@ class PDFGenerator:
         cp_role = (report_data.get("counterpart_role") or "").strip()
         
         pdf_canvas.setFont("Helvetica-Bold", 11)
-        pdf_canvas.setFillColor(accent_color)
+        pdf_canvas.setFillColor(colors.HexColor("#0F172A"))
         pdf_canvas.drawCentredString(center_x, y, (cp_name or "SIN CONTRAPARTE").upper())
         if cp_role:
             y -= 0.16 * inch
+            pdf_canvas.setFont("Helvetica", 9.5)
+            pdf_canvas.setFillColor(colors.HexColor("#475569"))
             pdf_canvas.drawCentredString(center_x, y, cp_role.upper())
 
-        # 11. FECHA:
-        y -= 0.35 * inch
+        # 11. FECHA: ANCLADA EN ZONA DEDICADA, A SALVO DE CUALQUIER SOBREPOSICIÓN
+        # Espacio de más de 70 pt libre por encima del pie de página
+        fecha_y = 1.45 * inch
         pdf_canvas.setFont("Helvetica-Bold", 11)
         pdf_canvas.setFillColor(accent_color)
         
@@ -514,10 +578,11 @@ class PDFGenerator:
         w_full = pdf_canvas.stringWidth(full_date_text, "Helvetica-Bold", 11)
         
         start_x = center_x - w_full/2
-        pdf_canvas.drawString(start_x, y, full_date_text)
+        pdf_canvas.drawString(start_x, fecha_y, full_date_text)
         # Subrayar solo la palabra FECHA
         pdf_canvas.setLineWidth(1)
-        pdf_canvas.line(start_x, y - 2, start_x + w_label - 2, y - 2)
+        pdf_canvas.setStrokeColor(accent_color)
+        pdf_canvas.line(start_x, fecha_y - 2, start_x + w_label - 2, fecha_y - 2)
 
 
     def _draw_general_info(self, pdf_canvas: canvas.Canvas, report_data: Dict) -> None:
@@ -1118,7 +1183,7 @@ class PDFGenerator:
         pdf_canvas.showPage()
         if watermark_logo:
             self._add_watermark_logo(pdf_canvas, watermark_logo)
-        y = self._draw_header_branding(pdf_canvas, report_data)
+        y = self._draw_header_branding(pdf_canvas, report_data, logo_path=watermark_logo)
         y -= 0.35 * inch
 
         pdf_canvas.setFont("Helvetica-Bold", 14)
@@ -1127,22 +1192,31 @@ class PDFGenerator:
 
         y -= 0.15 * inch
         pdf_canvas.setStrokeColor(colors.HexColor("#2E7D32"))
-        pdf_canvas.setLineWidth(2)
+        pdf_canvas.setLineWidth(1.2)
         pdf_canvas.line(self.left_margin, y, self.page_width - self.right_margin, y)
 
         table_top = y - 0.35 * inch
         # 45% del ancho: suficiente para etiquetas + deja espacio a la gráfica
         table_width = (self.page_width - self.left_margin - self.right_margin) * 0.45
         column_widths = [table_width * 0.78, table_width * 0.22]
-        header_height = 0.4 * inch
+        col_divider_x = self.left_margin + column_widths[0]
+        header_height = 0.42 * inch
 
         # Encabezado de la tabla
+        pdf_canvas.setLineWidth(0.75)
+        pdf_canvas.setStrokeColor(colors.HexColor("#2E7D32"))
         pdf_canvas.setFillColor(colors.HexColor("#DAEBC8"))
         pdf_canvas.rect(self.left_margin, table_top - header_height, table_width, header_height, stroke=1, fill=1)
-        pdf_canvas.setFillColor(colors.black)
+        pdf_canvas.line(col_divider_x, table_top, col_divider_x, table_top - header_height)
+
+        pdf_canvas.setFillColor(colors.HexColor("#1B5E20"))
         header_title = f"RESULTADO DE LAS {scheme.get('chart_label', self._get_results_label(report_data.get('type', '')))}"
-        header_lines = self._wrap_text(header_title, "Helvetica-Bold", 9, column_widths[0] - 8, pdf_canvas)
-        line_y = table_top - 0.12 * inch
+        header_lines = self._wrap_text(header_title, "Helvetica-Bold", 9, column_widths[0] - 14, pdf_canvas)
+        
+        h_line_h = 12
+        total_h_height = (len(header_lines) - 1) * h_line_h
+        h_start_y = (table_top - header_height / 2) + (total_h_height / 2) - 3.2
+        line_y = h_start_y
         for line in header_lines:
             pdf_canvas.setFont("Helvetica-Bold", 9)
             pdf_canvas.drawCentredString(
@@ -1150,10 +1224,12 @@ class PDFGenerator:
                 line_y,
                 line,
             )
-            line_y -= 0.14 * inch
+            line_y -= h_line_h
+
+        pdf_canvas.setFont("Helvetica-Bold", 9)
         pdf_canvas.drawCentredString(
-            self.left_margin + column_widths[0] + column_widths[1] / 2,
-            table_top - (header_height / 2) + 2,
+            col_divider_x + column_widths[1] / 2,
+            table_top - (header_height / 2) - 3.2,
             "CANTIDAD",
         )
 
@@ -1174,35 +1250,43 @@ class PDFGenerator:
             
         rows.append(("TOTAL", stats.get("total", 0)))
 
-        font_size = 10
-        line_h = 0.170 * inch
-        min_row_h = 0.32 * inch
+        font_size = 9.5
+        line_h = 13
+        min_row_h = 0.38 * inch
 
         row_data = []
         for label, value in rows:
             font_name = "Helvetica-Bold" if label == "TOTAL" else "Helvetica"
-            wrapped = self._wrap_text(label, font_name, font_size, column_widths[0] - 10, pdf_canvas)
-            needed_h = max(min_row_h, len(wrapped) * line_h + 0.08 * inch)
+            wrapped = self._wrap_text(label, font_name, font_size, column_widths[0] - 16, pdf_canvas)
+            needed_h = max(min_row_h, len(wrapped) * line_h + 14)
             row_data.append((label, value, wrapped, font_name, needed_h))
 
         current_y = table_top - header_height
         for label, value, wrapped_lines, font_name, r_height in row_data:
             is_total = label == "TOTAL"
             fill_color = colors.HexColor("#F7FDF1") if not is_total else colors.HexColor("#FFF9E7")
+            
             pdf_canvas.setFillColor(fill_color)
+            pdf_canvas.setStrokeColor(colors.HexColor("#2E7D32"))
+            pdf_canvas.setLineWidth(0.75)
             pdf_canvas.rect(self.left_margin, current_y - r_height, table_width, r_height, stroke=1, fill=1)
+            pdf_canvas.line(col_divider_x, current_y, col_divider_x, current_y - r_height)
 
-            pdf_canvas.setFillColor(colors.black)
-            text_y = current_y - 0.12 * inch
+            cy_mid = current_y - (r_height / 2)
+            total_text_h = (len(wrapped_lines) - 1) * line_h
+            first_baseline_y = cy_mid + (total_text_h / 2) - (font_size * 0.35)
+
+            pdf_canvas.setFillColor(colors.HexColor("#0F172A") if not is_total else colors.HexColor("#1B5E20"))
+            text_y = first_baseline_y
             for line in wrapped_lines:
                 pdf_canvas.setFont(font_name, font_size)
-                pdf_canvas.drawString(self.left_margin + 6, text_y, line)
+                pdf_canvas.drawString(self.left_margin + 8, text_y, line)
                 text_y -= line_h
 
             pdf_canvas.setFont("Helvetica-Bold" if is_total else "Helvetica", font_size)
             pdf_canvas.drawCentredString(
-                self.left_margin + column_widths[0] + column_widths[1] / 2,
-                current_y - r_height / 2 - 3,
+                col_divider_x + column_widths[1] / 2,
+                cy_mid - (font_size * 0.35),
                 str(value),
             )
             current_y -= r_height
@@ -1215,9 +1299,11 @@ class PDFGenerator:
                 chart_x = self.left_margin + table_width + chart_gap
                 available_width = self.page_width - self.right_margin - chart_x
                 if available_width > 1.0 * inch:
-                    chart_width = min(available_width, 4.5 * inch)
-                    chart_height = chart_width * 0.80
-                    chart_top = table_top - 0.1 * inch
+                    chart_width = min(available_width, 4.8 * inch)
+                    with Image.open(chart_path) as c_img:
+                        img_w, img_h = c_img.size
+                    chart_height = chart_width * (img_h / img_w)
+                    chart_top = table_top - 0.05 * inch
                     chart_bottom = chart_top - chart_height
                     pdf_canvas.drawImage(
                         chart_path,
@@ -1225,6 +1311,7 @@ class PDFGenerator:
                         chart_bottom,
                         width=chart_width,
                         height=chart_height,
+                        preserveAspectRatio=True,
                         mask="auto",
                     )
             finally:
@@ -2397,12 +2484,8 @@ class PDFGenerator:
         if profile_entry:
             return [profile_entry]
 
-        # Solo usar equipo por defecto si NO se provee ninguna lista (raw_team is None)
-        # y si hay otros datos que indiquen que el informe no está vacío.
-        # Pero para evitar "información fantasma", mejor no devolver nada si no hay nada.
-        # if raw_team is None: ... (removido para evitar confusión del usuario)
-
-        return []
+        # Usar el equipo técnico predeterminado de CAIT Panamá si no se especifica otro
+        return DEFAULT_TECHNICAL_TEAM
 
     def _resolve_calibration_certificates(self, report_data: Dict) -> list:
         """Normaliza la estructura de certificados recibida desde la aplicación."""
@@ -2792,13 +2875,12 @@ class PDFGenerator:
         stats: Dict[str, int],
         scheme: Dict,
     ) -> Optional[str]:
-        """Genera una gráfica de pastel con colores bien diferenciados por grupo."""
+        """Genera una gráfica de Donut clínico ejecutivo con KPI central y tarjeta de desglose."""
 
         try:
             import matplotlib
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
-            from matplotlib import patheffects
         except Exception as exc:  # pragma: no cover
             print(f"No se pudo cargar matplotlib: {exc}")
             return None
@@ -2809,11 +2891,11 @@ class PDFGenerator:
 
         # ── Segmentos y colores según tipo de prueba ──
         if dataset_key == "audiometria":
-            # Agrupar siempre en 3 categorías con colores fijos y bien contrastados
+            # Agrupar siempre en 3 categorías con paleta clínica ejecutiva
             group_config = [
-                ("normal",     "NORMAL",     "#2E7D32"),  # verde oscuro
-                ("unilateral", "UNILATERAL", "#F57C00"),  # naranja fuerte
-                ("bilateral",  "BILATERAL",  "#C62828"),  # rojo oscuro
+                ("normal",     "NORMAL",           "#10B981"),  # Verde esmeralda clínico
+                ("unilateral", "CAÍDA UNILATERAL", "#F59E0B"),  # Ámbar advertencia
+                ("bilateral",  "CAÍDA BILATERAL",  "#EF4444"),  # Rojo coral clínico
             ]
             data_labels, data_values, palette = [], [], []
             for grp, label, color in group_config:
@@ -2823,15 +2905,15 @@ class PDFGenerator:
                     data_values.append(count)
                     palette.append(hex_to_rgb(color))
         else:
-            # Espirometría: colores individuales vivos
+            # Espirometría y otras pruebas: colores clínicos armoniosos
             espiro_colors = [
-                "#1565C0",  # azul
-                "#F57C00",  # naranja
-                "#C62828",  # rojo
-                "#6A1B9A",  # violeta
-                "#00695C",  # teal
-                "#AD1457",  # rosa
-                "#558B2F",  # verde oliva
+                "#10B981",  # Verde esmeralda
+                "#3B82F6",  # Azul corporativo
+                "#06B6D4",  # Cyan médico
+                "#8B5CF6",  # Violeta
+                "#F59E0B",  # Ámbar
+                "#F97316",  # Naranja
+                "#EF4444",  # Rojo clínico
             ]
             data_labels, data_values, palette = [], [], []
             for idx, opt in enumerate(scheme.get("options", [])):
@@ -2848,61 +2930,67 @@ class PDFGenerator:
         if not data_values:
             data_values = [1]
             data_labels = ["SIN DATOS"]
-            palette = [hex_to_rgb("#9E9E9E")]
+            palette = [hex_to_rgb("#94A3B8")]
 
-        def label_fmt(pct: float) -> str:
-            absolute = int(round(pct * total_count / 100.0))
-            return f"{pct:.0f}%\n({absolute})"
-
-        fig, ax = plt.subplots(figsize=(5.0, 3.8), dpi=180)
+        # Configuración de lienzo elegante
+        fig, ax = plt.subplots(figsize=(5.5, 3.8), dpi=200)
         fig.patch.set_alpha(0)
         ax.set_facecolor("none")
 
-        explode = [0.05] * len(data_values)
-        wedges, texts, autotexts = ax.pie(  # type: ignore
-            data_values,
-            colors=palette,
-            startangle=90,
-            explode=explode,
-            autopct=label_fmt,
-            pctdistance=0.70,
-            textprops={"fontsize": 9, "color": "#FFFFFF", "fontweight": "bold"},
-            wedgeprops={"linewidth": 2, "edgecolor": "#FFFFFF"},
-        )
+        # Donut Chart con separación fina y acabado limpio
+        if len(data_values) == 1:
+            from matplotlib.patches import Wedge
+            w = Wedge((0, 0), 1.0, 0, 359.999, width=0.35, facecolor=palette[0], edgecolor="white", linewidth=2.2)
+            ax.add_patch(w)
+            wedges = [w]
+            ax.set_xlim(-1.25, 1.25)
+            ax.set_ylim(-1.25, 1.25)
+            ax.axis("equal")
+            ax.axis("off")
+        else:
+            wedges, _ = ax.pie(  # type: ignore
+                data_values,
+                colors=palette,
+                startangle=130,
+                wedgeprops=dict(width=0.35, edgecolor="white", linewidth=2.2),
+                pctdistance=0.75,
+            )
 
-        for autotext in autotexts:
-            autotext.set_fontsize(8)
-            autotext.set_fontweight("bold")
-            autotext.set_color("#FFFFFF")
-            autotext.set_path_effects([
-                patheffects.withStroke(linewidth=1.5, foreground="#00000088")
-            ])
+        # Métrica Central (KPI): Total de colaboradores / casos
+        ax.text(0, 0.12, f"{total_count}", ha="center", va="center",
+                fontsize=22, fontweight="bold", color="#0F172A")
+        ax.text(0, -0.15, "TOTAL CASOS\nEVALUADOS", ha="center", va="center",
+                fontsize=7.5, fontweight="bold", color="#64748B", linespacing=1.2)
 
-        # Leyenda clara al lado derecho
+        # Tarjeta de desglose y leyenda moderna al lado derecho
         legend_labels = [
-            f"{lbl}:  {val}  ({val/total_count*100:.0f}%)"
+            f"{lbl}\n{val} casos  ({val/total_count*100:.1f}%)"
             for lbl, val in zip(data_labels, data_values)
         ]
-        legend = ax.legend(
+        leg = ax.legend(
             wedges,
             legend_labels,
             loc="center left",
-            bbox_to_anchor=(1.02, 0.5),
+            bbox_to_anchor=(0.96, 0.5),
             frameon=True,
-            fontsize=8.5,
-            facecolor="#F9FBF7",
-            edgecolor="#CCCCCC",
+            fontsize=8.0 if len(data_values) > 4 else 8.5,
+            facecolor="#F8FAFC",
+            edgecolor="#CBD5E1",
+            borderpad=0.8,
+            labelspacing=0.8 if len(data_values) > 4 else 1.1,
         )
-        for text in legend.get_texts():
-            text.set_color("#1A1A1A")
+        leg.get_frame().set_boxstyle("round,pad=0.6,rounding_size=0.4")
+        for text in leg.get_texts():
+            text.set_color("#334155")
 
         chart_label = scheme.get("chart_label", dataset_key.upper())
         ax.set_title(
-            f"DISTRIBUCIÓN — {chart_label}",
-            fontsize=10,
+            f"DISTRIBUCIÓN CLÍNICA — {chart_label}",
+            fontsize=9.5,
             fontweight="bold",
-            color="#1B5E20",
+            color="#0F172A",
             pad=14,
+            loc="left",
         )
         ax.axis("equal")
 
@@ -2912,7 +3000,7 @@ class PDFGenerator:
         temp_file.close()
 
         fig.savefig(temp_path, format="png", bbox_inches="tight",
-                    transparent=True, dpi=180)
+                    transparent=True, dpi=200)
         plt.close(fig)
         return temp_path
 
@@ -3088,17 +3176,17 @@ class PDFGenerator:
     def _draw_footer(self, pdf_canvas: canvas.Canvas, page_number: int = 1) -> None:
         """Pie de página con numeración de página (oculta el número en la portada)."""
 
-        y = self.bottom_margin / 2
-        motto_y = y + 0.22 * inch
+        motto_y = 0.44 * inch
+        page_y = 0.35 * inch
         pdf_canvas.setFont("Helvetica-Oblique", 9)
         pdf_canvas.setFillColor(colors.HexColor("#666666"))
         pdf_canvas.drawCentredString(self.page_width / 2, motto_y, '"EL PILAR DE TUS SENTIDOS".')
 
         if page_number > 1:
             pdf_canvas.setFont("Helvetica", 8)
-            pdf_canvas.setFillColor(colors.black)
+            pdf_canvas.setFillColor(colors.HexColor("#475569"))
             pdf_canvas.drawString(
                 self.page_width - self.right_margin - 0.5 * inch,
-                y,
+                page_y,
                 f"Página {page_number}",
             )

@@ -29,7 +29,7 @@ from openpyxl.utils import get_column_letter
 class DataExchangeService:
     """Maneja la exportación e importación de datos clínicos entre aplicaciones y equipos."""
 
-    VERSION = "2.3.0"
+    VERSION = "2.3.2"
     FORMAT_IDENTIFIER = "CAIT_DATA_PACKAGE_V1"
 
     # =========================================================================
