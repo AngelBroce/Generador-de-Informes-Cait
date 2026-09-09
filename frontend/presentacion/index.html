@@ -319,6 +319,7 @@
   // ── Auto-save (fusiona con datos existentes para no borrar resultados) ────
   let saveTimer = null;
   async function autoSave(showIndicator = true) {
+    if (window.isDraftLoading) return;
     try {
       const existing = await fetch('/api/report').then(r => r.ok ? r.json() : {}).catch(() => ({}));
       const formData = collectFormData();
@@ -330,7 +331,8 @@
       const res = await fetch('/api/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(merged)
+        body: JSON.stringify(merged),
+        _allowDuringLoading: true
       });
       if (res.ok && showIndicator) showSavedIndicator();
     } catch(e) { /* silencioso */ }
@@ -418,6 +420,7 @@
       if (report.counterpart_role) document.getElementById('counterpart-role').value = report.counterpart_role;
 
       toggleCombinedFields();
+      if (window.updateActiveDraftBadge) window.updateActiveDraftBadge(report._draft_name || null);
     } catch(e) { 
       console.error('Error crítico en loadData:', e);
     }

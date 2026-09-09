@@ -51,16 +51,42 @@ window.fetch = function(url, options) {
   return _originalFetch.apply(this, arguments);
 };
 
-// Evitar que inputs en DOM recién montado disparen autoguardados durante los primeros 800ms
-window.isDraftLoading = true;
-window.addEventListener('DOMContentLoaded', () => {
-  setTimeout(() => {
-    const el = document.getElementById('global-loading-blocker');
-    if (!el || el.style.display === 'none') {
-      window.isDraftLoading = false;
+// Manejo limpio de carga
+window.isDraftLoading = false;
+
+// ── GUARDADO AUTOMÁTICO AL CAMBIAR DE PÁGINA ──
+window.saveCurrentPageData = async function() {
+  if (window.isDraftLoading) return;
+  try {
+    if (typeof window.saveReport === 'function') {
+      await window.saveReport(false);
+      return;
     }
-  }, 800);
-});
+    if (typeof window.saveAll === 'function') {
+      await window.saveAll(false);
+      return;
+    }
+    if (typeof window.autoSave === 'function') {
+      await window.autoSave(false);
+      return;
+    }
+    if (typeof window.collectFormData === 'function') {
+      const pageData = window.collectFormData();
+      if (pageData && Object.keys(pageData).length > 0) {
+        const existing = await fetch('/api/report').then(r => r.json()).catch(() => ({}));
+        const merged = { ...existing, ...pageData };
+        await fetch('/api/report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(merged),
+          _allowDuringLoading: true
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[CAIT] Error al guardar datos de la página actual:', err);
+  }
+};
 
 const sidebarLinks = [
   { href: "/presentacion/index.html", text: "Presentación del informe", icon: "description" },
@@ -82,7 +108,7 @@ function initSidebar() {
   let html = `
     <div class="px-6 mb-8">
       <h2 class="text-primary font-bold text-lg leading-tight cursor-pointer select-none" ondblclick="toggleConsole()">CAIT Panamá</h2>
-      <p class="text-on-surface-variant text-sm">Generador de Informes <span class="bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded ml-1 font-bold cursor-pointer select-none" ondblclick="toggleConsole()">v2.3.2</span></p>
+      <p class="text-on-surface-variant text-sm">Generador de Informes <span class="bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded ml-1 font-bold cursor-pointer select-none" ondblclick="toggleConsole()">v2.3.3</span></p>
     </div>
     <nav class="flex-1 px-2 space-y-1">
   `;
@@ -99,7 +125,7 @@ function initSidebar() {
     if (currentPath === '/presentacion/' && !currentHash && link.text === "Presentación del informe") isActive = true;
 
     html += `
-      <a href="${link.href}" class="${isActive ? 'nav-active' : 'nav-item'} flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors hover:bg-surface-container-high">
+      <a href="${link.href}" data-nav="true" class="${isActive ? 'nav-active' : 'nav-item'} flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors hover:bg-surface-container-high">
         <span class="material-symbols-outlined">${link.icon}</span><span>${link.text}</span>
       </a>
     `;
@@ -107,7 +133,45 @@ function initSidebar() {
 
   html += `</nav>`;
   container.innerHTML = html;
+
+  // Interceptar navegación del sidebar para guardar antes de cambiar de página
+  container.querySelectorAll('a[data-nav="true"]').forEach(a => {
+    a.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const target = a.getAttribute('href');
+      if (target) {
+        if (window.showToast) window.showToast('Guardando página...', 'success');
+        await window.saveCurrentPageData();
+        window.location.href = target;
+      }
+    });
+  });
 }
+
+window.updateActiveDraftBadge = async function(knownDraftName = null) {
+  const badge = document.getElementById('active-draft-indicator');
+  const textEl = document.getElementById('active-draft-text');
+  if (!badge || !textEl) return;
+  
+  let draftName = knownDraftName;
+  if (draftName === null) {
+    try {
+      const r = await fetch('/api/report').then(res => res.json());
+      draftName = r._draft_name || null;
+    } catch(e) { draftName = null; }
+  }
+
+  if (draftName && draftName !== 'current_report.json') {
+    const cleanName = draftName.replace(/\.json$/i, '');
+    badge.className = "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-primary/10 border border-primary/40 text-primary shadow-sm transition-all";
+    badge.title = `Borrador activo: ${cleanName}. Los cambios se guardan aquí automáticamente.`;
+    textEl.textContent = `Borrador: ${cleanName}`;
+  } else {
+    badge.className = "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-container border border-outline-variant text-outline transition-all";
+    badge.title = "Informe actual en memoria. Guarde un borrador si desea darle un nombre específico.";
+    textEl.textContent = "Sin borrador guardado";
+  }
+};
 
 function initHeader() {
   const header = document.getElementById('header-container');
@@ -115,15 +179,21 @@ function initHeader() {
 
   header.className = "h-16 flex items-center justify-between px-lg bg-surface border-b border-outline-variant shrink-0";
   header.innerHTML = `
-    <div class="flex items-center gap-3 text-primary font-bold text-lg cursor-pointer" onclick="location.href='/'">
-      <img src="/static/logo.png" alt="Logo CAIT" class="h-10 w-auto"/>
-      Generador de Informes CAIT
+    <div class="flex items-center gap-3">
+      <div id="header-logo-nav" class="flex items-center gap-3 text-primary font-bold text-lg cursor-pointer hover:opacity-90 transition-opacity">
+        <img src="/static/logo.png" alt="Logo CAIT" class="h-10 w-auto"/>
+        Generador de Informes CAIT
+      </div>
+      <div id="active-draft-indicator" class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-container border border-outline-variant text-outline transition-all">
+        <span class="material-symbols-outlined" style="font-size:16px;">bookmark</span>
+        <span id="active-draft-text">Sin borrador guardado</span>
+      </div>
     </div>
     <div class="flex items-center gap-2.5">
-      <button onclick="location.href='/config/evaluadores.html'" class="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-outline border border-outline-variant rounded-lg hover:bg-surface-container transition-colors" title="Catálogo de Evaluadores">
+      <button id="header-nav-evaluators" class="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-outline border border-outline-variant rounded-lg hover:bg-surface-container transition-colors" title="Catálogo de Evaluadores">
         <span class="material-symbols-outlined" style="font-size:17px;">group</span> Evaluadores
       </button>
-      <button onclick="location.href='/config/contrapartes.html'" class="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-outline border border-outline-variant rounded-lg hover:bg-surface-container transition-colors" title="Catálogo de Contrapartes">
+      <button id="header-nav-counterparts" class="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-outline border border-outline-variant rounded-lg hover:bg-surface-container transition-colors" title="Catálogo de Contrapartes">
         <span class="material-symbols-outlined" style="font-size:17px;">badge</span> Contrapartes
       </button>
       
@@ -150,6 +220,30 @@ function initHeader() {
     </div>
   `;
 
+  // Interceptar navegación desde botones del header
+  const logoNav = document.getElementById('header-logo-nav');
+  if (logoNav) {
+    logoNav.onclick = async () => {
+      await window.saveCurrentPageData();
+      location.href = '/';
+    };
+  }
+  const evNav = document.getElementById('header-nav-evaluators');
+  if (evNav) {
+    evNav.onclick = async () => {
+      await window.saveCurrentPageData();
+      location.href = '/config/evaluadores.html';
+    };
+  }
+  const cpNav = document.getElementById('header-nav-counterparts');
+  if (cpNav) {
+    cpNav.onclick = async () => {
+      await window.saveCurrentPageData();
+      location.href = '/config/contrapartes.html';
+    };
+  }
+
+  window.updateActiveDraftBadge();
   initGlobalButtons();
   initDataExchangeModal();
 }
@@ -213,11 +307,13 @@ function initGlobalButtons() {
       const res = await fetch('/api/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        body: JSON.stringify({ _draft_name: null }),
+        _allowDuringLoading: true
       });
       
       if (res.ok) {
         if (window.showToast) window.showToast('Datos limpiados ✓');
+        if (window.updateActiveDraftBadge) window.updateActiveDraftBadge(null);
         location.reload();
       } else {
         if (window.showToast) window.showToast('Error al limpiar datos', 'error');
@@ -232,8 +328,9 @@ function initGlobalButtons() {
   document.getElementById('btn-cancel-load').onclick = () => modalLoad.classList.add('hidden');
 
   document.getElementById('btn-confirm-save').onclick = async () => {
-    const name = document.getElementById('input-save-draft-name').value.trim();
+    let name = document.getElementById('input-save-draft-name').value.trim();
     if (!name) return alert('Por favor, introduce un nombre.');
+    if (!name.endsWith('.json')) name += '.json';
     
     if (window.showToast) window.showToast('Guardando borrador...');
     
@@ -245,13 +342,15 @@ function initGlobalButtons() {
     const res = await fetch('/api/report', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(merged)
+      body: JSON.stringify(merged),
+      _allowDuringLoading: true
     });
 
     if (res.ok) {
       if (window.showToast) window.showToast('¡Borrador guardado exitosamente! ✓');
       modalSave.classList.add('hidden');
       document.getElementById('input-save-draft-name').value = '';
+      if (window.updateActiveDraftBadge) window.updateActiveDraftBadge(name);
     } else {
       if (window.showToast) window.showToast('Error al guardar', 'error');
     }
@@ -290,7 +389,7 @@ function initGlobalButtons() {
           
           window.showLoadingBlocker(
             `Cargando "${draftName}"...`,
-            'Bloqueando interfaz mientras se carga y verifica toda la información médica. Por favor espere...'
+            'Cargando y verificando información médica. Por favor espere...'
           );
           
           // Deshabilitar todos los botones del modal para evitar clics dobles
@@ -300,25 +399,29 @@ function initGlobalButtons() {
           });
 
           try {
-            const rRes = await fetch(`/api/report?name=${encodeURIComponent(draftName)}`);
-            if (!rRes.ok) throw new Error('No se pudo cargar el borrador');
-            const data = await rRes.json();
+            // Cancelar cualquier autoguardado del DOM residual antes de recargar
+            window.isDraftLoading = true;
+            window.onbeforeunload = null;
             
-            // Activar en el servidor permitiendo la llamada interna
-            const pRes = await fetch('/api/report', {
+            const loadRes = await fetch('/api/drafts/load', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(data),
+              body: JSON.stringify({ name: draftName }),
               _allowDuringLoading: true
             });
-            if (!pRes.ok) throw new Error('No se pudo activar el reporte');
+            
+            if (!loadRes.ok) {
+              const errData = await loadRes.json().catch(() => ({}));
+              throw new Error(errData.detail || 'No se pudo cargar el borrador');
+            }
             
             if (window.showToast) window.showToast(`Borrador "${draftName}" cargado correctamente ✓`);
+            if (window.updateActiveDraftBadge) window.updateActiveDraftBadge(draftName);
             
             // Recargar completamente la página para que todos los campos y tablas se actualicen limpios
             setTimeout(() => {
               location.reload();
-            }, 400);
+            }, 300);
           } catch(err) {
             console.error('Error al abrir borrador:', err);
             window.hideLoadingBlocker();
@@ -534,7 +637,7 @@ function initDataExchangeModal() {
 
         <!-- Footer del Modal -->
         <div class="px-6 py-3 bg-surface-container-low border-t border-outline-variant flex justify-between items-center text-xs text-outline">
-          <span>CAIT Informes v2.3.2 • Sistema de Migración e Integración</span>
+          <span>CAIT Informes v2.3.3 • Sistema de Migración e Integración</span>
           <button id="btn-cancel-exchange" class="px-4 py-2 rounded-lg hover:bg-surface-container-high text-outline font-bold">Cerrar</button>
         </div>
 

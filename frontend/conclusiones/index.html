@@ -141,27 +141,34 @@
   let saveTimer = null;
   function scheduleAutoSave() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => saveAll(true), 1000);
+    saveTimer = setTimeout(() => saveAll(true), 400);
   }
 
   async function saveAll(showIndicator = false) {
+    if (window.isDraftLoading) return;
     try {
-      const existing = await fetch('/api/report').then(r => r.json()).catch(()=>({}));
       const val = document.getElementById('conclusion-text').value;
-      const data = { ...existing, conclusion_text: val };
-      await fetch('/api/report', {
-        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
+      const existing = await fetch('/api/report').then(r => r.json()).catch(()=>({}));
+      const data = { ...existing, conclusion_text: val, conclusion: val };
+      const res = await fetch('/api/report', {
+        method:'POST', 
+        headers:{'Content-Type':'application/json'}, 
+        body:JSON.stringify(data),
+        _allowDuringLoading: true
       });
-      if (!showIndicator) showToast('Borrador guardado correctamente ✓');
+      if (res.ok && showIndicator && window.showToast) {
+        window.showToast('Borrador guardado correctamente ✓');
+      }
     } catch(e) { console.error(e); }
   }
 
   async function loadData() {
     try {
       const report = await fetch('/api/report').then(r => r.json()).catch(()=>({}));
-      if (report.conclusion_text) document.getElementById('conclusion-text').value = report.conclusion_text;
-      
+      const val = (report.conclusion_text !== undefined) ? report.conclusion_text : (report.conclusion || '');
+      document.getElementById('conclusion-text').value = val;
       loadTemplates();
+      if (window.updateActiveDraftBadge) window.updateActiveDraftBadge(report._draft_name || null);
     } catch(e) { console.error('Error loadData', e); }
   }
 
@@ -189,6 +196,7 @@
           div.onclick = () => {
             document.getElementById('conclusion-text').value = t.text;
             showToast('Plantilla aplicada ✓');
+            saveAll(false);
           };
           list.appendChild(div);
         });
@@ -217,7 +225,13 @@
   };
 
   // Listeners para auto-guardado
-  document.getElementById('conclusion-text').addEventListener('input', scheduleAutoSave);
+  const conclusionEl = document.getElementById('conclusion-text');
+  conclusionEl.addEventListener('input', scheduleAutoSave);
+  conclusionEl.addEventListener('blur', () => saveAll(false));
+
+  // Guardar al salir de la página
+  window.addEventListener('pagehide', () => saveAll(false));
+  window.addEventListener('beforeunload', () => saveAll(false));
 
   // Diálogo guardar plantilla
   const modal = document.getElementById('modal-template');
@@ -242,12 +256,16 @@
   };
 
   function collectFormData() {
+    const val = document.getElementById('conclusion-text').value;
     return {
-      conclusion_text: document.getElementById('conclusion-text').value
+      conclusion_text: val,
+      conclusion: val
     };
   }
 
   window.saveReport = saveAll;
+  window.autoSave = saveAll;
+  window.saveAll = saveAll;
   window.loadData = loadData;
   window.collectFormData = collectFormData;
   window.addEventListener('DOMContentLoaded', loadData);

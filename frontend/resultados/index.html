@@ -515,15 +515,20 @@ function createBlock(tipo) {
 
 // ── Persistencia ──────────────────────────────────────────────────────────────
 async function autoSave(showIndicator = false) {
+  if (window.isDraftLoading) return;
   try {
     const existing = await fetch('/api/report').then(r => r.json()).catch(() => ({}));
     existing.resultados_audiometria = state.audiometria;
     existing.resultados_espirometria = state.espirometria;
     const res = await fetch('/api/report', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(existing)
+      method:'POST', 
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(existing),
+      _allowDuringLoading: true
     });
-    if (res.ok && showIndicator) showToast('Borrador guardado correctamente ✓');
+    if (res.ok && showIndicator && window.showToast) {
+      window.showToast('Borrador guardado correctamente ✓');
+    }
   } catch(e) { console.error('autoSave error', e); }
 }
 
@@ -544,6 +549,7 @@ async function loadData() {
 
 window.loadData = loadData;
 window.saveReport = saveReport;
+window.saveAll = saveReport;
 window.autoSave = autoSave;
 window.collectFormData = collectFormData;
 
@@ -582,6 +588,8 @@ async function loadPage() {
       renderTable('espirometria');
     }
 
+    if (window.updateActiveDraftBadge) window.updateActiveDraftBadge(report._draft_name || null);
+
   } catch(e) {
     console.error('Error cargando página:', e);
     document.getElementById('blocks-container').innerHTML =
@@ -590,6 +598,8 @@ async function loadPage() {
 }
 
 // ── Bindings ──────────────────────────────────────────────────────────────────
+window.addEventListener('pagehide', () => autoSave(false));
+window.addEventListener('beforeunload', () => autoSave(false));
 window.saveReport = saveReport;
 window.loadData = loadPage;
 window.addEventListener('DOMContentLoaded', loadPage);

@@ -151,26 +151,34 @@
   let saveTimer = null;
   function scheduleAutoSave() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => autoSave(true), 1000);
+    saveTimer = setTimeout(() => autoSave(true), 400);
   }
 
   async function autoSave(showIndicator = false) {
+    if (window.isDraftLoading) return;
     try {
-      const existing = await fetch('/api/report').then(r => r.json()).catch(()=>({}));
       const val = document.getElementById('recommendations-text').value;
-      const data = { ...existing, recommendations_text: val };
-      await fetch('/api/report', {
-        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
+      const existing = await fetch('/api/report').then(r => r.json()).catch(()=>({}));
+      const data = { ...existing, recommendations_text: val, recommendations: val };
+      const res = await fetch('/api/report', {
+        method:'POST', 
+        headers:{'Content-Type':'application/json'}, 
+        body:JSON.stringify(data),
+        _allowDuringLoading: true
       });
-      if (!showIndicator) showToast('Borrador guardado correctamente ✓');
+      if (res.ok && showIndicator && window.showToast) {
+        window.showToast('Borrador guardado correctamente ✓');
+      }
     } catch(e) { console.error(e); }
   }
 
   async function loadData() {
     try {
       const report = await fetch('/api/report').then(r => r.json()).catch(()=>({}));
-      if (report.recommendations_text) document.getElementById('recommendations-text').value = report.recommendations_text;
+      const val = (report.recommendations_text !== undefined) ? report.recommendations_text : (report.recommendations || '');
+      document.getElementById('recommendations-text').value = val;
       loadTemplates();
+      if (window.updateActiveDraftBadge) window.updateActiveDraftBadge(report._draft_name || null);
     } catch(e) { console.error('Error loadData', e); }
   }
 
@@ -198,6 +206,7 @@
           div.onclick = () => {
             document.getElementById('recommendations-text').value = t.text;
             showToast('Plantilla aplicada ✓');
+            autoSave(false);
           };
           list.appendChild(div);
         });
@@ -226,7 +235,13 @@
   };
 
   // Listeners para auto-guardado
-  document.getElementById('recommendations-text').addEventListener('input', scheduleAutoSave);
+  const recEl = document.getElementById('recommendations-text');
+  recEl.addEventListener('input', scheduleAutoSave);
+  recEl.addEventListener('blur', () => autoSave(false));
+
+  // Guardar al salir de la página
+  window.addEventListener('pagehide', () => autoSave(false));
+  window.addEventListener('beforeunload', () => autoSave(false));
 
   // Diálogo guardar plantilla
   const modal = document.getElementById('modal-template');
@@ -251,12 +266,16 @@
   };
 
   function collectFormData() {
+    const val = document.getElementById('recommendations-text').value;
     return {
-      recommendations_text: document.getElementById('recommendations-text').value
+      recommendations_text: val,
+      recommendations: val
     };
   }
 
   window.saveReport = autoSave;
+  window.autoSave = autoSave;
+  window.saveAll = autoSave;
   window.loadData = loadData;
   window.collectFormData = collectFormData;
   window.addEventListener('DOMContentLoaded', loadData);

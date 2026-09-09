@@ -544,14 +544,76 @@ def list_drafts():
         for f in files if f.name != "current_report.json"
     ]
 
+@app.post("/api/drafts/load")
+async def load_draft(request: Request):
+    body = await request.json()
+    raw_name = body.get("name", "").strip()
+    if not raw_name:
+        raise HTTPException(status_code=400, detail="Nombre de borrador requerido")
+    name = raw_name if raw_name.endswith(".json") else f"{raw_name}.json"
+    
+    target = data_root / "reports" / name
+    if not target.exists():
+        raise HTTPException(status_code=404, detail=f"No se encontró el borrador: {name}")
+        
+    try:
+        with open(target, "r", encoding="utf-8") as f:
+            disk_data = json.load(f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error leyendo borrador: {e}")
+        
+    data = normalize_report(disk_data)
+    data["_draft_name"] = name
+    data["_version"] = "2.3.3"
+    
+    if "conclusion_text" in data:
+        data["conclusion"] = data["conclusion_text"]
+    elif "conclusion" in data:
+        data["conclusion_text"] = data["conclusion"]
+        
+    if "recommendations_text" in data:
+        data["recommendations"] = data["recommendations_text"]
+    elif "recommendations" in data:
+        data["recommendations_text"] = data["recommendations"]
+
+    # Actualizar tanto el archivo de borrador como current_report.json
+    with open(target, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+        
+    with open(data_root / "reports" / "current_report.json", "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+        
+    return {"status": "ok", "message": f"Borrador '{name}' cargado correctamente", "report": data}
+
 @app.post("/api/report")
 async def save_report(request: Request):
     data = await request.json()
-    data["_version"] = "2.2.9"
-    name = data.get("_draft_name", "current_report.json")
-    if not name.endswith(".json"): name += ".json"
+    data["_version"] = "2.3.3"
     
-    target = data_root / "reports" / name
+    # Sincronizar conclusiones y recomendaciones bidireccionalmente
+    if "conclusion_text" in data:
+        data["conclusion"] = data["conclusion_text"]
+    elif "conclusion" in data:
+        data["conclusion_text"] = data["conclusion"]
+        
+    if "recommendations_text" in data:
+        data["recommendations"] = data["recommendations_text"]
+    elif "recommendations" in data:
+        data["recommendations_text"] = data["recommendations"]
+
+    raw_draft = data.get("_draft_name")
+    has_custom_draft = bool(raw_draft and raw_draft != "current_report.json")
+    
+    if has_custom_draft:
+        name = raw_draft
+        if not name.endswith(".json"): name += ".json"
+        data["_draft_name"] = name
+        target = data_root / "reports" / name
+    else:
+        name = "current_report.json"
+        target = data_root / "reports" / name
+        data.pop("_draft_name", None)
+        
     target.parent.mkdir(parents=True, exist_ok=True)
     
     # Preservar datos críticos de disco si el guardado parcial viene incompleto
@@ -572,16 +634,16 @@ async def save_report(request: Request):
         except Exception as e:
             print(f"Advertencia al fusionar con disco en save_report: {e}")
             
-    # Si es el guardado automático o el actual, también actualizar current_report.json
+    # Guardar en el destino principal
     with open(target, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
         
-    if name != "current_report.json":
-        # También guardar como actual para que se mantenga al recargar
+    if has_custom_draft:
+        # Si tiene borrador, guardar también como current_report.json para mantener sincronizado
         with open(data_root / "reports" / "current_report.json", "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
             
-    return {"status": "saved", "filename": name}
+    return {"status": "saved", "filename": name, "_draft_name": data.get("_draft_name")}
 
 def normalize_report(data: dict) -> dict:
     """Normaliza los campos de un reporte para asegurar compatibilidad con versiones anteriores."""
@@ -639,11 +701,16 @@ def normalize_report(data: dict) -> dict:
         if k in data and not data.get("evaluator_main"):
             data["evaluator_main"] = data[k]
 
-    # 3. Normalizar conclusiones y recomendaciones
-    if "conclusion" in data and not data.get("conclusion_text"):
+    # 3. Normalizar conclusiones y recomendaciones bidireccionalmente
+    if data.get("conclusion") and not data.get("conclusion_text"):
         data["conclusion_text"] = data["conclusion"]
-    if "recommendations" in data and not data.get("recommendations_text"):
+    elif data.get("conclusion_text") and not data.get("conclusion"):
+        data["conclusion"] = data["conclusion_text"]
+
+    if data.get("recommendations") and not data.get("recommendations_text"):
         data["recommendations_text"] = data["recommendations"]
+    elif data.get("recommendations_text") and not data.get("recommendations"):
+        data["recommendations"] = data["recommendations_text"]
 
     # 4. Migrar listas de resultados (evaluated, results, evaluaciones, evaluated_entries)
     ee = data.get("evaluated_entries")
@@ -720,7 +787,10 @@ def get_report(name: str = "current_report.json"):
         try:
             with open(target, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                return normalize_report(data)
+                res = normalize_report(data)
+                if name != "current_report.json" and not res.get("_draft_name"):
+                    res["_draft_name"] = name
+                return res
         except Exception as e:
             print(f"Error cargando reporte {name}: {e}")
             return {}
