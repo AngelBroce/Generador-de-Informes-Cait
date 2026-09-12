@@ -221,22 +221,35 @@
     await autoSave();
   }
 
+  let isPageLoaded = false;
+  window.__isPageDataLoaded = false;
+
   async function autoSave() {
+    if (window.isDraftLoading || window.__blockAllAutoSave || !isPageLoaded) return;
     const existing = await (await fetch('/api/report')).json().catch(()=>({})) || {};
     existing.adjuntos = adjuntos;
     await fetch('/api/report', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(existing) });
   }
 
   async function loadData() {
-    const res = await fetch('/api/report');
-    if (res.ok) {
-      const report = await res.json();
-      reportType = (report.report_type || report.type || 'audiometria').toLowerCase();
-      if (Array.isArray(report.adjuntos)) {
-        adjuntos = report.adjuntos;
+    try {
+      window.__isPageDataLoaded = false;
+      isPageLoaded = false;
+      const res = await fetch('/api/report');
+      if (res.ok) {
+        const report = await res.json();
+        reportType = (report.report_type || report.type || 'audiometria').toLowerCase();
+        if (Array.isArray(report.adjuntos)) {
+          adjuntos = report.adjuntos;
+        }
+        renderZonales();
+        renderTable();
       }
-      renderZonales();
-      renderTable();
+      isPageLoaded = true;
+      window.__isPageDataLoaded = true;
+    } catch(e) {
+      isPageLoaded = true;
+      window.__isPageDataLoaded = true;
     }
   }
 

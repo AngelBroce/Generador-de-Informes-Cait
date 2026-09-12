@@ -154,8 +154,11 @@
     saveTimer = setTimeout(() => autoSave(true), 400);
   }
 
+  let isPageLoaded = false;
+  window.__isPageDataLoaded = false;
+
   async function autoSave(showIndicator = false) {
-    if (window.isDraftLoading) return;
+    if (window.isDraftLoading || window.__blockAllAutoSave || !isPageLoaded) return;
     try {
       const val = document.getElementById('recommendations-text').value;
       const existing = await fetch('/api/report').then(r => r.json()).catch(()=>({}));
@@ -163,8 +166,7 @@
       const res = await fetch('/api/report', {
         method:'POST', 
         headers:{'Content-Type':'application/json'}, 
-        body:JSON.stringify(data),
-        _allowDuringLoading: true
+        body:JSON.stringify(data)
       });
       if (res.ok && showIndicator && window.showToast) {
         window.showToast('Borrador guardado correctamente ✓');
@@ -174,12 +176,20 @@
 
   async function loadData() {
     try {
+      window.__isPageDataLoaded = false;
+      isPageLoaded = false;
       const report = await fetch('/api/report').then(r => r.json()).catch(()=>({}));
       const val = (report.recommendations_text !== undefined) ? report.recommendations_text : (report.recommendations || '');
       document.getElementById('recommendations-text').value = val;
       loadTemplates();
       if (window.updateActiveDraftBadge) window.updateActiveDraftBadge(report._draft_name || null);
-    } catch(e) { console.error('Error loadData', e); }
+      isPageLoaded = true;
+      window.__isPageDataLoaded = true;
+    } catch(e) { 
+      console.error('Error loadData', e);
+      isPageLoaded = true;
+      window.__isPageDataLoaded = true;
+    }
   }
 
   async function loadTemplates() {
@@ -240,8 +250,12 @@
   recEl.addEventListener('blur', () => autoSave(false));
 
   // Guardar al salir de la página
-  window.addEventListener('pagehide', () => autoSave(false));
-  window.addEventListener('beforeunload', () => autoSave(false));
+  window.addEventListener('pagehide', () => {
+    if (isPageLoaded && !window.isDraftLoading && !window.__blockAllAutoSave) autoSave(false);
+  });
+  window.addEventListener('beforeunload', () => {
+    if (isPageLoaded && !window.isDraftLoading && !window.__blockAllAutoSave) autoSave(false);
+  });
 
   // Diálogo guardar plantilla
   const modal = document.getElementById('modal-template');

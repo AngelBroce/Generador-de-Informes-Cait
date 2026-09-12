@@ -5,9 +5,11 @@
 
 // ── PROTECCIÓN GLOBAL CONTRA MANIPULACIÓN DURANTE CARGA DE BORRADORES ──
 window.isDraftLoading = false;
+window.__blockAllAutoSave = false;
 
 window.showLoadingBlocker = function(title = "Cargando borrador...", subtitle = "Por favor espere. La interfaz está bloqueada para proteger los datos médicos.") {
   window.isDraftLoading = true;
+  window.__blockAllAutoSave = true;
   let el = document.getElementById('global-loading-blocker');
   if (!el) {
     el = document.createElement('div');
@@ -35,28 +37,30 @@ window.showLoadingBlocker = function(title = "Cargando borrador...", subtitle = 
 
 window.hideLoadingBlocker = function() {
   window.isDraftLoading = false;
+  window.__blockAllAutoSave = false;
   const el = document.getElementById('global-loading-blocker');
   if (el) el.style.display = 'none';
   document.body.style.pointerEvents = '';
 };
 
-// Interceptar fetch para bloquear llamadas de autoguardado concurrentes o prematuras durante la carga
+// Interceptar fetch para bloquear llamadas de autoguardado concurrentes o prematuras durante la carga o navegacion
 const _originalFetch = window.fetch;
 window.fetch = function(url, options) {
   const isPostReport = (typeof url === 'string' && url.includes('/api/report') && options && options.method === 'POST');
-  if (window.isDraftLoading && isPostReport && (!options || !options._allowDuringLoading)) {
-    console.warn('[CAIT] Guardado bloqueado automáticamente: se está cargando un borrador en segundo plano.');
+  if ((window.isDraftLoading || window.__blockAllAutoSave) && isPostReport && (!options || !options._isDraftLoaderAction)) {
+    console.warn('[CAIT] Guardado bloqueado automáticamente: se está cargando un borrador o navegando.');
     return Promise.resolve(new Response(JSON.stringify({ status: "blocked_during_loading" }), { status: 200 }));
   }
   return _originalFetch.apply(this, arguments);
 };
 
-// Manejo limpio de carga
-window.isDraftLoading = false;
-
 // ── GUARDADO AUTOMÁTICO AL CAMBIAR DE PÁGINA ──
 window.saveCurrentPageData = async function() {
-  if (window.isDraftLoading) return;
+  if (window.isDraftLoading || window.__blockAllAutoSave) return;
+  if (window.__isPageDataLoaded === false) {
+    console.warn('[CAIT] saveCurrentPageData omitido: la página aún no ha terminado de cargar sus datos.');
+    return;
+  }
   try {
     if (typeof window.saveReport === 'function') {
       await window.saveReport(false);
@@ -74,12 +78,17 @@ window.saveCurrentPageData = async function() {
       const pageData = window.collectFormData();
       if (pageData && Object.keys(pageData).length > 0) {
         const existing = await fetch('/api/report').then(r => r.json()).catch(() => ({}));
+        // Proteger listas de resultados contra sobreescritura accidental con arrays vacíos
+        for (const k of ['resultados_audiometria', 'resultados_espirometria']) {
+          if (Array.isArray(pageData[k]) && pageData[k].length === 0 && Array.isArray(existing[k]) && existing[k].length > 0) {
+            delete pageData[k];
+          }
+        }
         const merged = { ...existing, ...pageData };
         await fetch('/api/report', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(merged),
-          _allowDuringLoading: true
+          body: JSON.stringify(merged)
         });
       }
     }
@@ -108,7 +117,7 @@ function initSidebar() {
   let html = `
     <div class="px-6 mb-8">
       <h2 class="text-primary font-bold text-lg leading-tight cursor-pointer select-none" ondblclick="toggleConsole()">CAIT Panamá</h2>
-      <p class="text-on-surface-variant text-sm">Generador de Informes <span class="bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded ml-1 font-bold cursor-pointer select-none" ondblclick="toggleConsole()">v2.3.3</span></p>
+      <p class="text-on-surface-variant text-sm">Generador de Informes <span class="bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded ml-1 font-bold cursor-pointer select-none" ondblclick="toggleConsole()">v2.3.4</span></p>
     </div>
     <nav class="flex-1 px-2 space-y-1">
   `;
@@ -140,8 +149,11 @@ function initSidebar() {
       e.preventDefault();
       const target = a.getAttribute('href');
       if (target) {
-        if (window.showToast) window.showToast('Guardando página...', 'success');
-        await window.saveCurrentPageData();
+        if (window.__isPageDataLoaded !== false && !window.isDraftLoading && !window.__blockAllAutoSave) {
+          if (window.showToast) window.showToast('Guardando página...', 'success');
+          await window.saveCurrentPageData();
+        }
+        window.__blockAllAutoSave = true;
         window.location.href = target;
       }
     });
@@ -399,15 +411,16 @@ function initGlobalButtons() {
           });
 
           try {
-            // Cancelar cualquier autoguardado del DOM residual antes de recargar
+            // Cancelar cualquier autoguardado del DOM residual antes y durante la recarga
             window.isDraftLoading = true;
+            window.__blockAllAutoSave = true;
             window.onbeforeunload = null;
             
             const loadRes = await fetch('/api/drafts/load', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ name: draftName }),
-              _allowDuringLoading: true
+              _isDraftLoaderAction: true
             });
             
             if (!loadRes.ok) {
@@ -420,10 +433,13 @@ function initGlobalButtons() {
             
             // Recargar completamente la página para que todos los campos y tablas se actualicen limpios
             setTimeout(() => {
+              window.__blockAllAutoSave = true;
               location.reload();
-            }, 300);
+            }, 250);
           } catch(err) {
             console.error('Error al abrir borrador:', err);
+            window.isDraftLoading = false;
+            window.__blockAllAutoSave = false;
             window.hideLoadingBlocker();
             document.querySelectorAll('#drafts-list button, #modal-load-draft button').forEach(b => {
               b.disabled = false;
@@ -637,7 +653,7 @@ function initDataExchangeModal() {
 
         <!-- Footer del Modal -->
         <div class="px-6 py-3 bg-surface-container-low border-t border-outline-variant flex justify-between items-center text-xs text-outline">
-          <span>CAIT Informes v2.3.3 • Sistema de Migración e Integración</span>
+          <span>CAIT Informes v2.3.4 • Sistema de Migración e Integración</span>
           <button id="btn-cancel-exchange" class="px-4 py-2 rounded-lg hover:bg-surface-container-high text-outline font-bold">Cerrar</button>
         </div>
 

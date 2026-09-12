@@ -173,20 +173,33 @@
     e.target.value = '';
   });
 
+  let isPageLoaded = false;
+  window.__isPageDataLoaded = false;
+
   async function autoSave() {
+    if (window.isDraftLoading || window.__blockAllAutoSave || !isPageLoaded) return;
     const existing = await (await fetch('/api/report')).json().catch(()=>({})) || {};
     existing.adjuntos = adjuntos;
     await fetch('/api/report', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(existing) });
   }
 
   async function loadData() {
-    const res = await fetch('/api/report');
-    if (res.ok) {
-      const report = await res.json();
-      if (Array.isArray(report.adjuntos)) {
-        adjuntos = report.adjuntos;
-        renderTable();
+    try {
+      window.__isPageDataLoaded = false;
+      isPageLoaded = false;
+      const res = await fetch('/api/report');
+      if (res.ok) {
+        const report = await res.json();
+        if (Array.isArray(report.adjuntos)) {
+          adjuntos = report.adjuntos;
+          renderTable();
+        }
       }
+      isPageLoaded = true;
+      window.__isPageDataLoaded = true;
+    } catch(e) {
+      isPageLoaded = true;
+      window.__isPageDataLoaded = true;
     }
   }
 

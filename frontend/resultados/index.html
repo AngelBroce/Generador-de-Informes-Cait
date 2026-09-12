@@ -495,6 +495,8 @@ function createBlock(tipo) {
   root.querySelector('[data-action="clear-table"]').addEventListener('click', () => {
     if (state[tipo].length === 0) return;
     if (!confirm('¿Eliminar todos los resultados de este bloque?')) return;
+    if (tipo === 'espirometria') userClearedEspiro = true;
+    if (tipo === 'audiometria') userClearedAudio = true;
     state[tipo] = [];
     renderTable(tipo);
     autoSave();
@@ -514,17 +516,42 @@ function createBlock(tipo) {
 }
 
 // ── Persistencia ──────────────────────────────────────────────────────────────
+let isPageLoaded = false;
+let userClearedEspiro = false;
+let userClearedAudio = false;
+window.__isPageDataLoaded = false;
+
 async function autoSave(showIndicator = false) {
-  if (window.isDraftLoading) return;
+  if (window.isDraftLoading || window.__blockAllAutoSave || !isPageLoaded) return;
   try {
     const existing = await fetch('/api/report').then(r => r.json()).catch(() => ({}));
-    existing.resultados_audiometria = state.audiometria;
-    existing.resultados_espirometria = state.espirometria;
+    
+    // Solo sobreescribir las listas si tienen datos o el usuario las limpió explícitamente
+    if (state.audiometria.length > 0 || userClearedAudio) {
+      existing.resultados_audiometria = state.audiometria;
+    } else if (Array.isArray(existing.resultados_audiometria) && existing.resultados_audiometria.length > 0) {
+      state.audiometria = existing.resultados_audiometria;
+    }
+    
+    if (state.espirometria.length > 0 || userClearedEspiro) {
+      existing.resultados_espirometria = state.espirometria;
+    } else if (Array.isArray(existing.resultados_espirometria) && existing.resultados_espirometria.length > 0) {
+      state.espirometria = existing.resultados_espirometria;
+    }
+
+    // Si hay espirometría con datos, asegurar que no se pierda el report_type
+    if (existing.resultados_espirometria && existing.resultados_espirometria.length > 0) {
+      if (!existing.resultados_audiometria || existing.resultados_audiometria.length === 0) {
+        existing.report_type = 'espirometria';
+      } else {
+        existing.report_type = 'audiometria_espirometria';
+      }
+    }
+
     const res = await fetch('/api/report', {
-      method:'POST', 
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(existing),
-      _allowDuringLoading: true
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(existing)
     });
     if (res.ok && showIndicator && window.showToast) {
       window.showToast('Borrador guardado correctamente ✓');
@@ -533,10 +560,15 @@ async function autoSave(showIndicator = false) {
 }
 
 function collectFormData() {
-  return {
-    resultados_audiometria: state.audiometria,
-    resultados_espirometria: state.espirometria
-  };
+  if (!isPageLoaded) return {};
+  const data = {};
+  if (state.audiometria.length > 0 || userClearedAudio) {
+    data.resultados_audiometria = state.audiometria;
+  }
+  if (state.espirometria.length > 0 || userClearedEspiro) {
+    data.resultados_espirometria = state.espirometria;
+  }
+  return data;
 }
 
 async function saveReport() {
@@ -556,13 +588,26 @@ window.collectFormData = collectFormData;
 // ── Cargar y renderizar todo ──────────────────────────────────────────────────
 async function loadPage() {
   try {
-    await Promise.all([loadPersons(), loadResultSchemes()]);
-    const report = await fetch('/api/report').then(r => r.json()).catch(() => ({}));
+    window.__isPageDataLoaded = false;
+    isPageLoaded = false;
+    
+    // Cargar informe y catálogos en paralelo
+    const [report, _persons, _schemes] = await Promise.all([
+      fetch('/api/report').then(r => r.json()).catch(() => ({})),
+      loadPersons(),
+      loadResultSchemes()
+    ]);
+    
+    // Cargar datos guardados
+    if (Array.isArray(report.resultados_audiometria)) state.audiometria = report.resultados_audiometria;
+    if (Array.isArray(report.resultados_espirometria)) state.espirometria = report.resultados_espirometria;
+
     const tipo = (report.report_type || 'audiometria').toLowerCase();
 
-    // determinar qué bloques mostrar
-    const hasAudio  = tipo.includes('audiometri');
-    const hasEspiro = tipo.includes('espirom');
+    // Determinar qué bloques mostrar:
+    // ¡CRÍTICO! Si hay resultados de espirometría cargados, SIEMPRE mostrar espirometría
+    const hasEspiro = tipo.includes('espirom') || state.espirometria.length > 0;
+    const hasAudio  = tipo.includes('audiometri') || (!hasEspiro && state.audiometria.length > 0);
 
     // Subtítulo descriptivo
     let subtitleText = '';
@@ -571,11 +616,7 @@ async function loadPage() {
     else subtitleText = 'Informe de Audiometría';
     document.getElementById('subtitle').textContent = subtitleText;
 
-    // cargar datos guardados
-    if (Array.isArray(report.resultados_audiometria)) state.audiometria = report.resultados_audiometria;
-    if (Array.isArray(report.resultados_espirometria)) state.espirometria = report.resultados_espirometria;
-
-    // construir bloques
+    // Construir bloques
     const container = document.getElementById('blocks-container');
     container.innerHTML = '';
 
@@ -589,6 +630,9 @@ async function loadPage() {
     }
 
     if (window.updateActiveDraftBadge) window.updateActiveDraftBadge(report._draft_name || null);
+    
+    isPageLoaded = true;
+    window.__isPageDataLoaded = true;
 
   } catch(e) {
     console.error('Error cargando página:', e);
@@ -598,8 +642,12 @@ async function loadPage() {
 }
 
 // ── Bindings ──────────────────────────────────────────────────────────────────
-window.addEventListener('pagehide', () => autoSave(false));
-window.addEventListener('beforeunload', () => autoSave(false));
+window.addEventListener('pagehide', () => {
+  if (isPageLoaded && !window.isDraftLoading && !window.__blockAllAutoSave) autoSave(false);
+});
+window.addEventListener('beforeunload', () => {
+  if (isPageLoaded && !window.isDraftLoading && !window.__blockAllAutoSave) autoSave(false);
+});
 window.saveReport = saveReport;
 window.loadData = loadPage;
 window.addEventListener('DOMContentLoaded', loadPage);

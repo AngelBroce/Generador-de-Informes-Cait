@@ -292,8 +292,13 @@
     return patterns.some(p => p.test(cleaned));
   }
 
+  let isPageLoaded = false;
+  window.__isPageDataLoaded = false;
+  window.__userChangedReportType = false;
+
   // ── Recolectar datos del formulario ───────────────────────────────────────
   function collectFormData() {
+    if (!isPageLoaded) return {};
     return {
       report_type:      document.getElementById('report-type').value,
       date_mode:        dateMode,
@@ -319,20 +324,28 @@
   // ── Auto-save (fusiona con datos existentes para no borrar resultados) ────
   let saveTimer = null;
   async function autoSave(showIndicator = true) {
-    if (window.isDraftLoading) return;
+    if (window.isDraftLoading || window.__blockAllAutoSave || !isPageLoaded) return;
     try {
       const existing = await fetch('/api/report').then(r => r.ok ? r.json() : {}).catch(() => ({}));
       const formData = collectFormData();
+      if (!formData || Object.keys(formData).length === 0) return;
       
-      // Si el campo de fecha está vacío en el DOM pero lo tenemos en el objeto fusionado, 
-      // podría ser una carga lenta. Solo sobreescribir si realmente hay algo en el DOM o si es intencional.
       const merged = { ...existing, ...formData };
+      
+      // Si el usuario no modificó manualmente el report_type y el existente es espirometría o combinado, preservarlo
+      if (existing.report_type && !window.__userChangedReportType) {
+        merged.report_type = existing.report_type;
+      }
+
+      // Si campos de texto están vacíos pero en el existente sí tenían datos, no sobreescribir con vacío
+      for (const k of ['company_name', 'company_activity', 'company_address', 'location']) {
+        if (!formData[k] && existing[k]) merged[k] = existing[k];
+      }
       
       const res = await fetch('/api/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(merged),
-        _allowDuringLoading: true
+        body: JSON.stringify(merged)
       });
       if (res.ok && showIndicator) showSavedIndicator();
     } catch(e) { /* silencioso */ }
@@ -421,8 +434,12 @@
 
       toggleCombinedFields();
       if (window.updateActiveDraftBadge) window.updateActiveDraftBadge(report._draft_name || null);
+      isPageLoaded = true;
+      window.__isPageDataLoaded = true;
     } catch(e) { 
       console.error('Error crítico en loadData:', e);
+      isPageLoaded = true;
+      window.__isPageDataLoaded = true;
     }
   }
 
@@ -500,12 +517,19 @@
     }
   });
 
-  // Mostrar/ocultar campos combinados
-  document.getElementById('report-type').addEventListener('change', toggleCombinedFields);
+  // Mostrar/ocultar campos combinados y marcar cambio manual
+  document.getElementById('report-type').addEventListener('change', () => {
+    window.__userChangedReportType = true;
+    toggleCombinedFields();
+  });
 
   // Guardar al salir de la página
-  window.addEventListener('pagehide', () => autoSave(false));
-  window.addEventListener('beforeunload', () => autoSave(false));
+  window.addEventListener('pagehide', () => {
+    if (isPageLoaded && !window.isDraftLoading && !window.__blockAllAutoSave) autoSave(false);
+  });
+  window.addEventListener('beforeunload', () => {
+    if (isPageLoaded && !window.isDraftLoading && !window.__blockAllAutoSave) autoSave(false);
+  });
 
   window.addEventListener('DOMContentLoaded', () => {
     initDatePicker();

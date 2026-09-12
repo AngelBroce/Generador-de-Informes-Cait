@@ -564,7 +564,7 @@ async def load_draft(request: Request):
         
     data = normalize_report(disk_data)
     data["_draft_name"] = name
-    data["_version"] = "2.3.3"
+    data["_version"] = "2.3.4"
     
     if "conclusion_text" in data:
         data["conclusion"] = data["conclusion_text"]
@@ -588,7 +588,7 @@ async def load_draft(request: Request):
 @app.post("/api/report")
 async def save_report(request: Request):
     data = await request.json()
-    data["_version"] = "2.3.3"
+    data["_version"] = "2.3.4"
     
     # Sincronizar conclusiones y recomendaciones bidireccionalmente
     if "conclusion_text" in data:
@@ -602,6 +602,21 @@ async def save_report(request: Request):
         data["recommendations_text"] = data["recommendations"]
 
     raw_draft = data.get("_draft_name")
+    
+    # Si la petición no especificó _draft_name, verificar si current_report.json en disco ya tenía uno activo
+    cr_path = data_root / "reports" / "current_report.json"
+    cr_disk = {}
+    if cr_path.exists():
+        try:
+            with open(cr_path, "r", encoding="utf-8") as f:
+                cr_disk = json.load(f)
+        except Exception:
+            cr_disk = {}
+            
+    if not raw_draft and isinstance(cr_disk, dict) and cr_disk.get("_draft_name"):
+        raw_draft = cr_disk.get("_draft_name")
+        data["_draft_name"] = raw_draft
+
     has_custom_draft = bool(raw_draft and raw_draft != "current_report.json")
     
     if has_custom_draft:
@@ -617,22 +632,55 @@ async def save_report(request: Request):
     target.parent.mkdir(parents=True, exist_ok=True)
     
     # Preservar datos críticos de disco si el guardado parcial viene incompleto
+    disk_data = {}
     if target.exists():
         try:
             with open(target, "r", encoding="utf-8") as f:
                 disk_data = json.load(f)
-            if isinstance(disk_data, dict):
-                for list_k in ["resultados_audiometria", "resultados_espirometria"]:
-                    if not data.get(list_k) and disk_data.get(list_k):
-                        data[list_k] = disk_data[list_k]
-                if disk_data.get("adjuntos") and isinstance(disk_data["adjuntos"], list):
-                    existing_adj = {a.get("name"): a for a in disk_data["adjuntos"] if isinstance(a, dict) and a.get("name")}
-                    for a in data.get("adjuntos", []):
-                        if isinstance(a, dict) and a.get("name"):
-                            existing_adj[a["name"]] = a
-                    data["adjuntos"] = list(existing_adj.values())
         except Exception as e:
-            print(f"Advertencia al fusionar con disco en save_report: {e}")
+            print(f"Advertencia al leer disco en save_report: {e}")
+            disk_data = {}
+            
+    # Fuente de referencia prioritaria (target o current_report)
+    ref_data = disk_data if disk_data else cr_disk
+    if isinstance(ref_data, dict):
+        for list_k in ["resultados_audiometria", "resultados_espirometria"]:
+            incoming_list = data.get(list_k)
+            # Si viene ausente o lista vacía [], pero en disco sí existían datos, preservar
+            if not incoming_list and ref_data.get(list_k):
+                data[list_k] = ref_data[list_k]
+                
+        # Proteger campos generales si vienen vacíos desde un formulario no inicializado
+        for str_k in ["company_name", "company_activity", "company_address", "location", "plant", "evaluation_date", "study_date"]:
+            if not data.get(str_k) and ref_data.get(str_k):
+                data[str_k] = ref_data[str_k]
+                
+        # Proteger conclusiones y recomendaciones si vienen vacías
+        for txt_k in ["conclusion_text", "conclusion", "recommendations_text", "recommendations"]:
+            if not data.get(txt_k) and ref_data.get(txt_k):
+                data[txt_k] = ref_data[txt_k]
+                
+        # Protección inteligente del report_type:
+        has_espiro = bool(data.get("resultados_espirometria"))
+        has_audio = bool(data.get("resultados_audiometria"))
+        if has_espiro and not has_audio:
+            if data.get("report_type") != "audiometria_espirometria":
+                data["report_type"] = "espirometria"
+        elif has_espiro and has_audio:
+            data["report_type"] = "audiometria_espirometria"
+        elif not has_espiro and has_audio:
+            if data.get("report_type") != "audiometria_espirometria":
+                data["report_type"] = "audiometria"
+        elif ref_data.get("report_type"):
+            if data.get("report_type") == "audiometria" and ref_data.get("report_type") != "audiometria":
+                data["report_type"] = ref_data["report_type"]
+
+        if ref_data.get("adjuntos") and isinstance(ref_data["adjuntos"], list):
+            existing_adj = {a.get("name"): a for a in ref_data["adjuntos"] if isinstance(a, dict) and a.get("name")}
+            for a in data.get("adjuntos", []):
+                if isinstance(a, dict) and a.get("name"):
+                    existing_adj[a["name"]] = a
+            data["adjuntos"] = list(existing_adj.values())
             
     # Guardar en el destino principal
     with open(target, "w", encoding="utf-8") as f:
@@ -790,6 +838,8 @@ def get_report(name: str = "current_report.json"):
                 res = normalize_report(data)
                 if name != "current_report.json" and not res.get("_draft_name"):
                     res["_draft_name"] = name
+                elif name == "current_report.json" and not res.get("_draft_name") and data.get("_draft_name"):
+                    res["_draft_name"] = data["_draft_name"]
                 return res
         except Exception as e:
             print(f"Error cargando reporte {name}: {e}")
