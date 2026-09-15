@@ -117,7 +117,7 @@ function initSidebar() {
   let html = `
     <div class="px-6 mb-8">
       <h2 class="text-primary font-bold text-lg leading-tight cursor-pointer select-none" ondblclick="toggleConsole()">CAIT Panamá</h2>
-      <p class="text-on-surface-variant text-sm">Generador de Informes <span class="bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded ml-1 font-bold cursor-pointer select-none" ondblclick="toggleConsole()">v2.3.4</span></p>
+      <p class="text-on-surface-variant text-sm">Generador de Informes <span class="bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded ml-1 font-bold cursor-pointer select-none" ondblclick="toggleConsole()">v2.3.5</span></p>
     </div>
     <nav class="flex-1 px-2 space-y-1">
   `;
@@ -175,11 +175,11 @@ window.updateActiveDraftBadge = async function(knownDraftName = null) {
 
   if (draftName && draftName !== 'current_report.json') {
     const cleanName = draftName.replace(/\.json$/i, '');
-    badge.className = "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-primary/10 border border-primary/40 text-primary shadow-sm transition-all";
+    badge.className = "flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-bold rounded-lg bg-primary/10 border border-primary/40 text-primary shadow-sm min-w-0 max-w-[120px] xs:max-w-[150px] sm:max-w-[180px] md:max-w-[240px] lg:max-w-[320px] transition-all";
     badge.title = `Borrador activo: ${cleanName}. Los cambios se guardan aquí automáticamente.`;
     textEl.textContent = `Borrador: ${cleanName}`;
   } else {
-    badge.className = "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-container border border-outline-variant text-outline transition-all";
+    badge.className = "flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-container border border-outline-variant text-outline min-w-0 max-w-[120px] xs:max-w-[150px] sm:max-w-[180px] md:max-w-[240px] lg:max-w-[320px] transition-all";
     badge.title = "Informe actual en memoria. Guarde un borrador si desea darle un nombre específico.";
     textEl.textContent = "Sin borrador guardado";
   }
@@ -189,50 +189,96 @@ function initHeader() {
   const header = document.getElementById('header-container');
   if (!header) return;
 
-  header.className = "h-16 flex items-center justify-between px-lg bg-surface border-b border-outline-variant shrink-0";
+  header.className = "h-16 flex items-center justify-between px-3 sm:px-4 lg:px-6 bg-surface border-b border-outline-variant shrink-0 gap-2";
   header.innerHTML = `
-    <div class="flex items-center gap-3">
-      <div id="header-logo-nav" class="flex items-center gap-3 text-primary font-bold text-lg cursor-pointer hover:opacity-90 transition-opacity">
-        <img src="/static/logo.png" alt="Logo CAIT" class="h-10 w-auto"/>
-        Generador de Informes CAIT
-      </div>
-      <div id="active-draft-indicator" class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-container border border-outline-variant text-outline transition-all">
-        <span class="material-symbols-outlined" style="font-size:16px;">bookmark</span>
-        <span id="active-draft-text">Sin borrador guardado</span>
-      </div>
-    </div>
-    <div class="flex items-center gap-2.5">
-      <button id="header-nav-evaluators" class="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-outline border border-outline-variant rounded-lg hover:bg-surface-container transition-colors" title="Catálogo de Evaluadores">
-        <span class="material-symbols-outlined" style="font-size:17px;">group</span> Evaluadores
-      </button>
-      <button id="header-nav-counterparts" class="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-outline border border-outline-variant rounded-lg hover:bg-surface-container transition-colors" title="Catálogo de Contrapartes">
-        <span class="material-symbols-outlined" style="font-size:17px;">badge</span> Contrapartes
-      </button>
-      
-      <div class="w-px h-6 bg-outline-variant mx-0.5"></div>
-      
-      <button id="btn-data-exchange-global" class="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-primary bg-primary/10 border border-primary/30 rounded-lg hover:bg-primary/20 transition-all shadow-sm" title="Importar o Exportar datos en formatos no-PDF (Excel, CSV, CAIT)">
-        <span class="material-symbols-outlined" style="font-size:18px;">sync_alt</span> Importar / Exportar Datos
+    <!-- Lado Izquierdo: Identidad de Marca y Badge de Borrador Responsivo -->
+    <div class="flex items-center gap-2 sm:gap-3 min-w-0 shrink">
+      <!-- Botón móvil para mostrar/ocultar barra lateral en pantallas pequeñas -->
+      <button id="sidebar-toggle-btn" class="p-1.5 rounded-lg text-outline hover:text-primary hover:bg-surface-container md:hidden shrink-0 transition-colors" title="Menú de Navegación">
+        <span class="material-symbols-outlined" style="font-size:22px;">menu</span>
       </button>
 
-      <button id="btn-load-global" class="flex items-center gap-1 px-3 py-2 text-xs font-bold text-primary border border-primary rounded-lg hover:bg-surface-container transition-colors">
-        <span class="material-symbols-outlined" style="font-size:17px;">folder_open</span> Borradores
+      <div id="header-logo-nav" class="flex items-center gap-2 sm:gap-3 text-primary font-bold text-base sm:text-lg cursor-pointer hover:opacity-90 transition-opacity shrink-0">
+        <img src="/static/logo.png" alt="Logo CAIT" class="h-9 sm:h-10 w-auto shrink-0"/>
+        <span class="hidden md:inline whitespace-nowrap">Generador de Informes CAIT</span>
+        <span class="inline md:hidden whitespace-nowrap">CAIT</span>
+      </div>
+
+      <div id="active-draft-indicator" class="hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-container border border-outline-variant text-outline min-w-0 max-w-[120px] xs:max-w-[150px] sm:max-w-[180px] md:max-w-[240px] lg:max-w-[320px] transition-all" title="Sin borrador guardado">
+        <span class="material-symbols-outlined shrink-0" style="font-size:16px;">bookmark</span>
+        <span id="active-draft-text" class="truncate">Sin borrador guardado</span>
+      </div>
+    </div>
+
+    <!-- Lado Derecho: Acciones Adaptativas y Menú Desplegable de Opciones -->
+    <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+      <!-- Acciones Secundarias para pantallas amplias (>= 1280px / xl) -->
+      <div class="hidden xl:flex items-center gap-1.5 border-r border-outline-variant pr-2 mr-0.5">
+        <button id="header-nav-evaluators" class="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-outline border border-outline-variant rounded-lg hover:bg-surface-container transition-colors" title="Catálogo de Evaluadores">
+          <span class="material-symbols-outlined" style="font-size:17px;">group</span> Evaluadores
+        </button>
+        <button id="header-nav-counterparts" class="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-outline border border-outline-variant rounded-lg hover:bg-surface-container transition-colors" title="Catálogo de Contrapartes">
+          <span class="material-symbols-outlined" style="font-size:17px;">badge</span> Contrapartes
+        </button>
+        <div class="w-px h-6 bg-outline-variant mx-0.5"></div>
+        <button id="btn-data-exchange-global" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-primary bg-primary/10 border border-primary/30 rounded-lg hover:bg-primary/20 transition-all shadow-sm" title="Importar o Exportar datos en formatos no-PDF (Excel, CSV, CAIT)">
+          <span class="material-symbols-outlined" style="font-size:18px;">sync_alt</span> Importar / Exportar
+        </button>
+        <button id="btn-load-global" class="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-primary border border-primary rounded-lg hover:bg-surface-container transition-colors" title="Cargar Borradores">
+          <span class="material-symbols-outlined" style="font-size:17px;">folder_open</span> Borradores
+        </button>
+        <div class="w-px h-6 bg-outline-variant mx-0.5"></div>
+        <button id="btn-clear-all-global" class="flex items-center gap-1 px-2 py-1.5 text-xs font-bold text-error border border-error/30 rounded-lg hover:bg-error/10 transition-colors" title="Limpiar formulario">
+          <span class="material-symbols-outlined" style="font-size:17px;">delete_sweep</span>
+        </button>
+      </div>
+
+      <!-- Menú Desplegable Adaptativo "Opciones" para pantallas reducidas (< 1280px / xl) -->
+      <div class="relative inline-block text-left xl:hidden" id="overflow-menu-container">
+        <button id="btn-overflow-menu" class="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-outline border border-outline-variant rounded-lg hover:bg-surface-container transition-colors bg-white" title="Más herramientas y opciones">
+          <span class="material-symbols-outlined" style="font-size:18px;">more_vert</span>
+          <span class="hidden sm:inline">Opciones</span>
+        </button>
+        <!-- Popover del menú -->
+        <div id="overflow-menu-dropdown" class="hidden absolute right-0 mt-2 w-56 rounded-xl bg-white shadow-2xl border border-outline-variant py-1.5 z-[10000] text-xs divide-y divide-outline-variant/30">
+          <div class="py-1">
+            <button id="drop-btn-evaluators" class="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-on-surface hover:bg-surface-container font-semibold transition-colors">
+              <span class="material-symbols-outlined text-primary" style="font-size:18px;">group</span> Evaluadores
+            </button>
+            <button id="drop-btn-counterparts" class="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-on-surface hover:bg-surface-container font-semibold transition-colors">
+              <span class="material-symbols-outlined text-primary" style="font-size:18px;">badge</span> Contrapartes
+            </button>
+          </div>
+          <div class="py-1">
+            <button id="drop-btn-data-exchange" class="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-on-surface hover:bg-surface-container font-semibold transition-colors">
+              <span class="material-symbols-outlined text-primary" style="font-size:18px;">sync_alt</span> Importar / Exportar Datos
+            </button>
+            <button id="drop-btn-load" class="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-on-surface hover:bg-surface-container font-semibold transition-colors">
+              <span class="material-symbols-outlined text-primary" style="font-size:18px;">folder_open</span> Cargar Borradores
+            </button>
+          </div>
+          <div class="py-1">
+            <button id="drop-btn-clear" class="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-error hover:bg-error/10 font-semibold transition-colors">
+              <span class="material-symbols-outlined text-error" style="font-size:18px;">delete_sweep</span> Limpiar Formulario
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Botones de Acción Primaria: Siempre Visibles, Prioritarios y Compactos -->
+      <button id="btn-save-global" class="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 text-xs font-bold text-on-primary bg-primary rounded-lg hover:opacity-90 transition-opacity shrink-0 shadow-sm" title="Guardar cambios">
+        <span class="material-symbols-outlined" style="font-size:17px;">save</span>
+        <span class="hidden sm:inline">Guardar</span>
       </button>
-      <button id="btn-save-global" class="flex items-center gap-1 px-3 py-2 text-xs font-bold text-on-primary bg-primary rounded-lg hover:opacity-90 transition-opacity">
-        <span class="material-symbols-outlined" style="font-size:17px;">save</span> Guardar
-      </button>
-      <button id="btn-export-zip-global" class="flex items-center gap-1 px-3 py-2 text-xs font-bold text-on-secondary bg-secondary rounded-lg hover:opacity-90 transition-opacity">
-        <span class="material-symbols-outlined" style="font-size:17px;">picture_as_pdf</span> Generar PDF / ZIP
-      </button>
-      
-      <div class="w-px h-6 bg-outline-variant mx-0.5"></div>
-      <button id="btn-clear-all-global" class="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-error border border-error/30 rounded-lg hover:bg-error/10 transition-colors" title="Limpiar formulario">
-        <span class="material-symbols-outlined" style="font-size:17px;">delete_sweep</span>
+      <button id="btn-export-zip-global" class="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 text-xs font-bold text-white bg-[#1b6d24] hover:bg-[#00450d] rounded-lg transition-colors shrink-0 shadow-sm" title="Generar Informe Oficial PDF / ZIP">
+        <span class="material-symbols-outlined" style="font-size:17px;">picture_as_pdf</span>
+        <span class="hidden md:inline">Generar PDF / ZIP</span>
+        <span class="inline md:hidden">PDF / ZIP</span>
       </button>
     </div>
   `;
 
-  // Interceptar navegación desde botones del header
+  // Interceptar navegación desde el logo
   const logoNav = document.getElementById('header-logo-nav');
   if (logoNav) {
     logoNav.onclick = async () => {
@@ -240,6 +286,8 @@ function initHeader() {
       location.href = '/';
     };
   }
+
+  // Interceptar botones de navegación de catálogo
   const evNav = document.getElementById('header-nav-evaluators');
   if (evNav) {
     evNav.onclick = async () => {
@@ -252,6 +300,59 @@ function initHeader() {
     cpNav.onclick = async () => {
       await window.saveCurrentPageData();
       location.href = '/config/contrapartes.html';
+    };
+  }
+
+  // Configurar Menú Desplegable "Opciones" en pantallas reducidas
+  const overflowBtn = document.getElementById('btn-overflow-menu');
+  const overflowDrop = document.getElementById('overflow-menu-dropdown');
+  const overflowContainer = document.getElementById('overflow-menu-container');
+  if (overflowBtn && overflowDrop && overflowContainer) {
+    overflowBtn.onclick = (e) => {
+      e.stopPropagation();
+      overflowDrop.classList.toggle('hidden');
+    };
+    document.addEventListener('click', (e) => {
+      if (!overflowContainer.contains(e.target)) {
+        overflowDrop.classList.add('hidden');
+      }
+    });
+
+    document.getElementById('drop-btn-evaluators')?.addEventListener('click', () => {
+      overflowDrop.classList.add('hidden');
+      if (evNav) evNav.click();
+      else {
+        window.saveCurrentPageData().then(() => location.href = '/config/evaluadores.html');
+      }
+    });
+    document.getElementById('drop-btn-counterparts')?.addEventListener('click', () => {
+      overflowDrop.classList.add('hidden');
+      if (cpNav) cpNav.click();
+      else {
+        window.saveCurrentPageData().then(() => location.href = '/config/contrapartes.html');
+      }
+    });
+    document.getElementById('drop-btn-data-exchange')?.addEventListener('click', () => {
+      overflowDrop.classList.add('hidden');
+      window.openDataExchangeModal();
+    });
+    document.getElementById('drop-btn-load')?.addEventListener('click', () => {
+      overflowDrop.classList.add('hidden');
+      document.getElementById('btn-load-global')?.click();
+    });
+    document.getElementById('drop-btn-clear')?.addEventListener('click', () => {
+      overflowDrop.classList.add('hidden');
+      document.getElementById('btn-clear-all-global')?.click();
+    });
+  }
+
+  // Botón toggle de sidebar para móviles / tablets compactas
+  const sidebarToggle = document.getElementById('sidebar-toggle-btn');
+  const sidebarContainer = document.getElementById('sidebar-container');
+  if (sidebarToggle && sidebarContainer) {
+    sidebarToggle.onclick = (e) => {
+      e.stopPropagation();
+      sidebarContainer.classList.toggle('mobile-open');
     };
   }
 
@@ -653,7 +754,7 @@ function initDataExchangeModal() {
 
         <!-- Footer del Modal -->
         <div class="px-6 py-3 bg-surface-container-low border-t border-outline-variant flex justify-between items-center text-xs text-outline">
-          <span>CAIT Informes v2.3.4 • Sistema de Migración e Integración</span>
+          <span>CAIT Informes v2.3.5 • Sistema de Migración e Integración</span>
           <button id="btn-cancel-exchange" class="px-4 py-2 rounded-lg hover:bg-surface-container-high text-outline font-bold">Cerrar</button>
         </div>
 
@@ -927,8 +1028,44 @@ window.openDataExchangeModal = function() {
 function injectStyles() {
   const style = document.createElement('style');
   style.innerHTML = `
-    #header-container { height: 64px; min-height: 64px; display: flex; background: #fcf9f8; }
-    #sidebar-container { width: 256px; min-width: 256px; display: flex; background: #f6f3f2; }
+    #header-container {
+      height: 64px;
+      min-height: 64px;
+      display: flex;
+      background: #ffffff;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+      position: relative;
+      z-index: 40;
+    }
+    #sidebar-container {
+      width: 256px;
+      min-width: 256px;
+      display: flex;
+      background: #f6f3f2;
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    @media (max-width: 767px) {
+      #sidebar-container {
+        position: fixed !important;
+        top: 64px;
+        bottom: 0;
+        left: 0;
+        z-index: 9999;
+        box-shadow: 4px 0 20px rgba(0,0,0,0.25);
+        transform: translateX(-100%);
+      }
+      #sidebar-container.mobile-open {
+        transform: translateX(0) !important;
+        display: flex !important;
+      }
+    }
+    #overflow-menu-dropdown {
+      animation: dropFadeIn 0.15s ease-out;
+    }
+    @keyframes dropFadeIn {
+      from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
     main { animation: fadeIn 0.15s ease-out; }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     .btn-loading { opacity: 0.7; pointer-events: none; }

@@ -171,9 +171,8 @@
     const empty = document.getElementById('empty-row');
     
     tbody.querySelectorAll('tr:not(#empty-row)').forEach(r=>r.remove());
-    document.getElementById('file-count').textContent = adjuntos.length + ' archivo' + (adjuntos.length!==1?'s':'');
-    
     const filtered = adjuntos.filter(a => a.tipo === 'Audiograma' || a.tipo === 'Reporte Espirometría' || a.tipo === 'Protocolo Resultados');
+    document.getElementById('file-count').textContent = filtered.length + ' archivo' + (filtered.length!==1?'s':'');
 
     if (filtered.length === 0) empty.style.display = '';
     else {

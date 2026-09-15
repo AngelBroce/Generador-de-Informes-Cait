@@ -16,6 +16,7 @@ def test_full_export_flow():
     
     # 1. Simular el llenado de datos (Presentacion, Resultados, Conclusion)
     sample_report = {
+        "_draft_name": "test_export.json",
         "report_type": "audiometria_espirometria",
         "company_name": "Empresa de Prueba S.A.",
         "location": "Ciudad de Panama",

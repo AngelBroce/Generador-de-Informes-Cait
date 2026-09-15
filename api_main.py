@@ -564,7 +564,7 @@ async def load_draft(request: Request):
         
     data = normalize_report(disk_data)
     data["_draft_name"] = name
-    data["_version"] = "2.3.4"
+    data["_version"] = "2.3.5"
     
     if "conclusion_text" in data:
         data["conclusion"] = data["conclusion_text"]
@@ -588,7 +588,7 @@ async def load_draft(request: Request):
 @app.post("/api/report")
 async def save_report(request: Request):
     data = await request.json()
-    data["_version"] = "2.3.4"
+    data["_version"] = "2.3.5"
     
     # Sincronizar conclusiones y recomendaciones bidireccionalmente
     if "conclusion_text" in data:
