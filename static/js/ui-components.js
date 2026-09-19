@@ -117,7 +117,7 @@ function initSidebar() {
   let html = `
     <div class="px-6 mb-8">
       <h2 class="text-primary font-bold text-lg leading-tight cursor-pointer select-none" ondblclick="toggleConsole()">CAIT Panamá</h2>
-      <p class="text-on-surface-variant text-sm">Generador de Informes <span class="bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded ml-1 font-bold cursor-pointer select-none" ondblclick="toggleConsole()">v2.3.5</span></p>
+      <p class="text-on-surface-variant text-sm">Generador de Informes <span class="bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded ml-1 font-bold cursor-pointer select-none" ondblclick="toggleConsole()">v2.3.6</span></p>
     </div>
     <nav class="flex-1 px-2 space-y-1">
   `;
@@ -754,7 +754,7 @@ function initDataExchangeModal() {
 
         <!-- Footer del Modal -->
         <div class="px-6 py-3 bg-surface-container-low border-t border-outline-variant flex justify-between items-center text-xs text-outline">
-          <span>CAIT Informes v2.3.5 • Sistema de Migración e Integración</span>
+          <span>CAIT Informes v2.3.6 • Sistema de Migración e Integración</span>
           <button id="btn-cancel-exchange" class="px-4 py-2 rounded-lg hover:bg-surface-container-high text-outline font-bold">Cerrar</button>
         </div>
 
