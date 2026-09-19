@@ -326,6 +326,9 @@ class PDFGenerator:
                 shutil.move(temp_pdf_path, output_path)
                 temp_pdf_path = None
 
+            # Optimización automática para garantizar que el archivo final sea menor a 25 MB (ideal para correo electrónico)
+            self._optimize_pdf_size(output_path, max_size_mb=24.5)
+
             return True
         except Exception as exc:  # pragma: no cover - logging simple error
             print(f"Error al generar PDF: {exc}")
@@ -2698,6 +2701,74 @@ class PDFGenerator:
         for trailing_path in trailing_pdfs:
             if trailing_path and os.path.exists(trailing_path):
                 os.remove(trailing_path)
+
+    def _optimize_pdf_size(self, file_path: str, max_size_mb: float = 24.5) -> None:
+        """Optimiza y comprime el PDF final para asegurar que no supere max_size_mb (24.5 MB para envío por correo)."""
+        if not os.path.exists(file_path):
+            return
+
+        current_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+        print(f"[PDF Optimizer] Tamaño inicial: {current_size_mb:.2f} MB (Límite configurado: {max_size_mb} MB)")
+
+        try:
+            import pymupdf
+            doc = pymupdf.open(file_path)
+
+            # Paso 1: Compresión de streams, deflación y eliminación de duplicados (100% sin pérdida de calidad)
+            temp_opt = file_path + ".opt.pdf"
+            doc.save(temp_opt, garbage=4, deflate=True, clean=True)
+            doc.close()
+
+            opt_size_mb = os.path.getsize(temp_opt) / (1024 * 1024)
+            print(f"[PDF Optimizer] Tamaño tras deflación: {opt_size_mb:.2f} MB")
+
+            # Paso 2: Si el PDF aún supera el límite deseado (ej. > 24.5 MB), recomprimir imágenes embebidas
+            if opt_size_mb > max_size_mb:
+                print(f"[PDF Optimizer] Aún excede {max_size_mb} MB. Aplicando compresión adaptativa de imágenes...")
+                doc2 = pymupdf.open(temp_opt)
+                import io
+                from PIL import Image
+
+                for page in doc2:
+                    image_list = page.get_images()
+                    for img_info in image_list:
+                        xref = img_info[0]
+                        base_img = doc2.extract_image(xref)
+                        if not base_img:
+                            continue
+                        raw_bytes = base_img["image"]
+                        try:
+                            im = Image.open(io.BytesIO(raw_bytes))
+                            if im.mode in ("RGBA", "P"):
+                                im = im.convert("RGB")
+                            # Reducir dimensiones si es excesivamente grande para hoja carta
+                            if max(im.size) > 1600:
+                                im.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
+                            buf = io.BytesIO()
+                            im.save(buf, format="JPEG", quality=75, optimize=True)
+                            doc2.update_stream(xref, buf.getvalue())
+                        except Exception:
+                            pass
+
+                temp_opt2 = file_path + ".opt2.pdf"
+                doc2.save(temp_opt2, garbage=4, deflate=True, clean=True)
+                doc2.close()
+                if os.path.exists(temp_opt):
+                    os.remove(temp_opt)
+                temp_opt = temp_opt2
+                opt_size_mb = os.path.getsize(temp_opt) / (1024 * 1024)
+                print(f"[PDF Optimizer] Tamaño tras compresión adaptativa: {opt_size_mb:.2f} MB")
+
+            # Aplicar archivo optimizado si su tamaño es menor o igual
+            if os.path.exists(temp_opt):
+                if os.path.getsize(temp_opt) <= os.path.getsize(file_path):
+                    shutil.move(temp_opt, file_path)
+                    final_mb = os.path.getsize(file_path) / (1024 * 1024)
+                    print(f"[PDF Optimizer] PDF final optimizado con éxito a: {final_mb:.2f} MB [OK]")
+                else:
+                    os.remove(temp_opt)
+        except Exception as e:
+            print(f"[PDF Optimizer] Advertencia durante optimización (se conserva original): {e}")
 
     def _is_blank_pdf_page(self, page) -> bool:
         """Determina si una página PDF está completamente vacía (sin stream de contenido).

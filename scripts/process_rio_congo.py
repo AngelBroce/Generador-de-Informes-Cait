@@ -27,8 +27,8 @@ patients_rio_congo = [
     {"row": 5, "name": "Mariángel Reyes", "cedula": "8-1005-559", "age": "23", "dob": "06/09/2003", "position": "Notificación", "result": "Normal bilateral", "emp_num": "110971"},
     {"row": 6, "name": "Albis Martínez", "cedula": "8-385-738", "age": "60", "dob": "28/03/1966", "position": "Lavandería", "result": "Normal bilateral", "emp_num": "6040"},
     {"row": 7, "name": "Jennifer Flores", "cedula": "8-831-2203", "age": "36", "dob": "05/12/1990", "position": "Línea", "result": "Normal bilateral", "emp_num": "111517"},
-    {"row": 8, "name": "Eladio Pérez", "cedula": "9-200-569", "age": "53", "dob": "26/05/1973", "position": "Termosellado", "result": "Normal bilateral", "emp_num": "109161"},
-    {"row": 9, "name": "Elizabeth Bonilla", "cedula": "6-59-705", "age": "60", "dob": "31/03/1966", "position": "Termosellado", "result": "Normal bilateral", "emp_num": "109629"},
+    {"row": 8, "name": "Eladio Pérez", "cedula": "9-200-569", "age": "53", "dob": "26/05/1973", "position": "Termosellado", "result": "Caída leve unilateral", "emp_num": "109161"},
+    {"row": 9, "name": "Elizabeth Bonilla", "cedula": "6-59-705", "age": "60", "dob": "31/03/1966", "position": "Termosellado", "result": "Caída leve bilateral", "emp_num": "109629"},
     {"row": 10, "name": "Silvia De Batista", "cedula": "8-524-2150", "age": "61", "dob": "09/01/1965", "position": "Línea", "result": "Normal bilateral", "emp_num": "10"},
     {"row": 11, "name": "Marianela Sánchez", "cedula": "8-949-213", "age": "26", "dob": "16/06/2000", "position": "Limpieza interna", "result": "Normal bilateral", "emp_num": "111665"},
     {"row": 12, "name": "Yanis Cedeño", "cedula": "8-909-696", "age": "29", "dob": "29/08/1997", "position": "Supervisora", "result": "Normal bilateral", "emp_num": "110791"},
@@ -104,8 +104,24 @@ report_rio_congo = {
     "evaluator_main": "Licda. Yara Lizeth Pérez A.",
     "evaluator_audio": "Licda. Yara Lizeth Pérez A.",
     "evaluator_spiro": "",
-    "conclusion_text": "Se evaluaron un total de 40 colaboradores de Toledano Río Congo mediante pruebas de audiometría ocupacional el día 13 de agosto de 2026. Todos los colaboradores evaluados presentan audición dentro de los límites normales (Normal bilateral).",
-    "recommendations_text": "1. Mantener el uso continuo y obligatorio de equipo de protección auditiva (tapones/orejeras) certificado en todas las áreas de exposición sonora.\n2. Continuar con el programa de vigilancia epidemiológica y seguimiento audiométrico periódico anual.\n3. Impartir capacitaciones periódicas en conservación auditiva y ergonomía laboral.",
+    "conclusion_text": (
+        "La empresa Productos Toledano S.A., realizó la toma de audiometrías ocupacionales el mes de agosto "
+        "(13 de agosto de 2026) a los colaboradores en la Planta Río Congo.\n\n"
+        "Se aplicó la prueba de audiometría laboral a un total de 40 colaboradores convocados, recopilando de forma "
+        "confidencial su historia clínica y laboral. Del total evaluado: 38 colaboradores (95.0%) presentaron audición "
+        "dentro de los límites normales (Normal bilateral), y 2 colaboradores (5.0%) presentaron alteración auditiva "
+        "(1 caso con caída leve unilateral en oído derecho y 1 caso con caída leve bilateral).\n\n"
+        "Todos los colaboradores fueron debidamente orientados sobre el cuidado de su audición, técnicas de colocación "
+        "de protección auditiva y prevención de fatiga acústica.\n\n"
+        "El audiómetro utilizado corresponde al equipo Otopod con certificado de calibración anual ISO, asegurando "
+        "la validez de las mediciones."
+    ),
+    "recommendations_text": (
+        "• Mantener el control audiométrico periódico (anual) para todos los colaboradores expuestos a niveles sonoros continuos o de impacto.\n"
+        "• Suministrar y exigir el uso continuo y adecuado del equipo de protección auditiva normado (tapones / orejeras) en planta.\n"
+        "• Dar seguimiento médico a los 2 colaboradores que presentaron caída leve (Eladio Pérez con caída unilateral y Elizabeth Bonilla con caída bilateral).\n"
+        "• Reforzar el programa de vigilancia epidemiológica de conservación auditiva en las instalaciones de Río Congo."
+    ),
     "resultados_audiometria": report_patients,
     "resultados_espirometria": [],
     "adjuntos": [

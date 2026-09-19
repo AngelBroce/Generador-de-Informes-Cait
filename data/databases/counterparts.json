@@ -1,8 +1,14 @@
 [
-	{
-		"id": "diego-calderon",
-		"name": "Licdo. Diego Calderon",
-		"role": "Enfermero",
-		"priority": 1
-	}
+  {
+    "id": "diego-calderon",
+    "name": "Licdo. Diego Calderon",
+    "role": "Enfermero",
+    "priority": 1
+  },
+  {
+    "id": "licda-yaleski-sanjur",
+    "name": "LICDA.YALESKI SANJUR",
+    "role": "OFICIAL DE SALUD OCUPACIONAL",
+    "priority": 2
+  }
 ]

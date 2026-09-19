@@ -33,6 +33,36 @@ DEFAULT_EVALUATORS: List[Dict] = [
         "priority": 1,
     },
     {
+        "id": "licdo-franklin-solano",
+        "name": "Licdo. Franklin Solano",
+        "title_label": "Licdo.",
+        "header_label": "Licenciado",
+        "profession": "Terapeuta Respiratorio",
+        "registry": "Registro Profesional",
+        "credential_file": "data/attachments/idoneidad/Licdo_Franklin_Solano.pdf",
+        "technical_details": [
+            "Terapeuta Respiratorio,",
+            "Registro Profesional.",
+        ],
+        "applicable_reports": ["espirometria"],
+        "priority": 2,
+    },
+    {
+        "id": "licda-zenety-yauricel-campos-vega",
+        "name": "Licda. Zenety Yauricel Campos Vega",
+        "title_label": "Licda.",
+        "header_label": "Licenciada",
+        "profession": "Fonoaudióloga",
+        "registry": "Registro Profesional",
+        "credential_file": "data/attachments/idoneidad/Licda.Zenety Yauricel Campos Vega.pdf",
+        "technical_details": [
+            "Fonoaudióloga,",
+            "Registro Profesional.",
+        ],
+        "applicable_reports": ["audiometria", "espirometria"],
+        "priority": 3,
+    },
+    {
         "id": "stephanie-maria-thorne",
         "name": "Licda. Stephanie María Thorne.",
         "title_label": "Licda.",
@@ -45,7 +75,7 @@ DEFAULT_EVALUATORS: List[Dict] = [
             "Registro 124.",
         ],
         "applicable_reports": ["espirometria"],
-        "priority": 1,
+        "priority": 4,
     },
 ]
 
@@ -115,15 +145,21 @@ class EvaluatorRepository:
         if not self.db_path.exists():
             self.save_all(DEFAULT_EVALUATORS)
             return
-        # Verificar que la Licda. Yara siempre esté en el catálogo
         entries = self.load_all()
-        yara_id = "yara-lizeth-perez"
-        has_yara = any(e.get("id") == yara_id for e in entries)
-        if not has_yara:
-            yara_default = next((e for e in DEFAULT_EVALUATORS if e.get("id") == yara_id), None)
-            if yara_default:
-                entries.insert(0, yara_default)
-                self.save_all(entries)
+        modified = False
+        # Asegurar que los evaluadores base estén disponibles si no existen por id ni nombre
+        for def_ev in DEFAULT_EVALUATORS:
+            def_id = def_ev.get("id")
+            def_name = (def_ev.get("name") or "").strip().lower()
+            exists = any(
+                e.get("id") == def_id or (e.get("name") or "").strip().lower() == def_name
+                for e in entries
+            )
+            if not exists:
+                entries.append(def_ev)
+                modified = True
+        if modified:
+            self.save_all(entries)
 
     def load_all(self) -> List[Dict]:
         try:
@@ -149,8 +185,31 @@ class EvaluatorRepository:
     def get_by_id(self, evaluator_id: str) -> Optional[Dict]:
         if not evaluator_id:
             return None
+        evaluator_id_str = str(evaluator_id).strip()
         for entry in self.load_all():
-            if entry.get("id") == evaluator_id:
+            if entry.get("id") == evaluator_id_str:
+                return entry
+        return None
+
+    def get_by_id_or_name(self, query: str) -> Optional[Dict]:
+        """Busca un evaluador por ID exacto, nombre completo o slug normalizado."""
+        if not query or not isinstance(query, str):
+            return None
+        q = query.strip()
+        q_norm = self._strip_accents(q.lower())
+        q_slug = n_slug_invalid.sub("-", q_norm).strip("-")
+        
+        for entry in self.load_all():
+            e_id = entry.get("id", "")
+            e_name = entry.get("name", "")
+            e_name_norm = self._strip_accents(e_name.lower())
+            e_name_slug = n_slug_invalid.sub("-", e_name_norm).strip("-")
+            
+            if e_id == q or e_name.lower() == q.lower():
+                return entry
+            if e_id == q_slug or e_name_slug == q_slug:
+                return entry
+            if q_norm and (q_norm in e_name_norm or e_name_norm in q_norm):
                 return entry
         return None
 
@@ -188,6 +247,33 @@ class EvaluatorRepository:
         entries.append(entry)
         self.save_all(entries)
         return entry
+
+    def upsert_evaluator(self, payload: Dict) -> Dict:
+        """Inserta o actualiza un evaluador preservando su ID o creándolo si no existe."""
+        if not payload or not isinstance(payload, dict):
+            raise ValueError("Payload de evaluador inválido.")
+
+        target_id = (payload.get("id") or "").strip()
+        target_name = (payload.get("name") or "").strip()
+
+        if not target_id and not target_name:
+            raise ValueError("El evaluador requiere al menos ID o nombre.")
+
+        existing_entry = None
+        if target_id:
+            existing_entry = self.get_by_id(target_id)
+        if not existing_entry and target_name:
+            existing_entry = self.get_by_id_or_name(target_name)
+
+        if existing_entry:
+            eval_id = existing_entry["id"]
+            updates = dict(payload)
+            # No sobreescribir con valores vacíos
+            clean_updates = {k: v for k, v in updates.items() if v is not None and v != "" and v != []}
+            updated = self.update_evaluator(eval_id, clean_updates)
+            return updated or existing_entry
+        else:
+            return self.add_evaluator(payload)
 
     def update_evaluator(self, evaluator_id: str, updates: Dict) -> Optional[Dict]:
         """Actualiza un evaluador existente y devuelve el registro."""

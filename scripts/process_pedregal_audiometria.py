@@ -18,35 +18,35 @@ DATABASES_DIR.mkdir(parents=True, exist_ok=True)
 
 # 1. Lista de 60 pacientes de Pedregal Audiometría
 patients_pedregal = [
-    {"name": "Luis Gonzalez", "cedula": "9-709-406", "age": "", "position": "Supervisor Pollo Vivo", "result": "Normal bilateral"},
-    {"name": "Gemino Acosta", "cedula": "9-127-447", "age": "61", "position": "Pollo Vivo", "result": "Normal bilateral"},
-    {"name": "Ramiro Abrego", "cedula": "1-742-1439", "age": "47", "position": "Pollo Vivo", "result": "Normal bilateral"},
+    {"name": "Luis Gonzalez", "cedula": "9-709-406", "age": "47", "position": "Supervisor Pollo Vivo", "result": "Caída leve bilateral"},
+    {"name": "Gemino Acosta", "cedula": "9-127-447", "age": "61", "position": "Pollo Vivo", "result": "Caída leve bilateral"},
+    {"name": "Ramiro Abrego", "cedula": "1-742-1439", "age": "47", "position": "Pollo Vivo", "result": "Caída leve bilateral"},
     {"name": "Ignacio Vasquez", "cedula": "9-169-694", "age": "57", "position": "Pollo Vivo", "result": "Normal bilateral"},
     {"name": "Manuel Perez", "cedula": "8-822-467", "age": "38", "position": "Pollo Vivo", "result": "Normal bilateral"},
-    {"name": "Agripino Gonzalez", "cedula": "4-265-307", "age": "", "position": "Pollo Vivo", "result": "Normal bilateral"},
-    {"name": "Anastacio Rodriguez", "cedula": "9-114-2060", "age": "60", "position": "Pollo Vivo", "result": "Normal bilateral"},
+    {"name": "Agripino Gonzalez", "cedula": "4-265-307", "age": "52", "position": "Pollo Vivo", "result": "Caída leve bilateral"},
+    {"name": "Anastacio Rodriguez", "cedula": "9-114-2090", "age": "60", "position": "Pollo Vivo", "result": "Caída leve bilateral"},
     {"name": "Manuel Degracia", "cedula": "4-718-1245", "age": "46", "position": "Pollo Vivo", "result": "Normal bilateral"},
     {"name": "Secundino Vanega", "cedula": "3-711-1778", "age": "43", "position": "Pollo Vivo", "result": "Normal bilateral"},
     {"name": "Isael Gonzalez", "cedula": "2-750-992", "age": "24", "position": "Pollo Vivo", "result": "Normal bilateral"},
     {"name": "Armando Morales", "cedula": "2-709-871", "age": "45", "position": "Pollo Vivo", "result": "Normal bilateral"},
-    {"name": "Ceferino Mendoza", "cedula": "4-765-706", "age": "46", "position": "Pollo Vivo", "result": "Normal bilateral"},
+    {"name": "Ceferino Mendoza", "cedula": "4-765-706", "age": "46", "position": "Pollo Vivo", "result": "Caída leve bilateral"},
     {"name": "Ariel Gil", "cedula": "8-937-841", "age": "27", "position": "Pollo Vivo", "result": "Normal bilateral"},
     {"name": "Javier Abrego", "cedula": "1-734-351", "age": "32", "position": "Pollo Vivo", "result": "Normal bilateral"},
     {"name": "Elvin Cortez", "cedula": "4-805-1669", "age": "30", "position": "Pollo Vivo", "result": "Normal bilateral"},
-    {"name": "Jose Ines Garcia", "cedula": "9-205-635", "age": "52", "position": "Pollo Vivo", "result": "Normal bilateral"},
+    {"name": "Jose Ines Garcia", "cedula": "9-205-635", "age": "52", "position": "Pollo Vivo", "result": "Caída leve unilateral"},
     {"name": "Jesus Bernal", "cedula": "8-722-1538", "age": "47", "position": "Pollo Vivo", "result": "Normal bilateral"},
-    {"name": "Alberto Carpintero", "cedula": "4-803-677", "age": "43", "position": "Pollo Vivo", "result": "Normal bilateral"},
+    {"name": "Alberto Carpintero", "cedula": "4-803-677", "age": "43", "position": "Pollo Vivo", "result": "Caída leve bilateral"},
     {"name": "Leonaldo Jaen", "cedula": "7-711-1269", "age": "28", "position": "Pollo Vivo", "result": "Normal bilateral"},
     {"name": "Indalecio Vasquez", "cedula": "9-711-138", "age": "46", "position": "Pollo Vivo", "result": "Normal bilateral"},
-    {"name": "Jose Ines Castillo", "cedula": "8-280-525", "age": "", "position": "Pollo Vivo", "result": "Normal bilateral"},
+    {"name": "Jose Ines Castillo", "cedula": "8-280-525", "age": "60", "position": "Pollo Vivo", "result": "Caída leve bilateral"},
     {"name": "Roman Eugenio", "cedula": "1-43-939", "age": "54", "position": "Pollo Vivo", "result": "Normal bilateral"},
     {"name": "Eymiss Arcia", "cedula": "8-718-2101", "age": "48", "position": "Evisceración", "result": "Normal bilateral"},
-    {"name": "Pedro Solis", "cedula": "4-195-916", "age": "61", "position": "Evisceración", "result": "Normal bilateral"},
+    {"name": "Pedro Solis", "cedula": "4-195-916", "age": "61", "position": "Evisceración", "result": "Caída leve bilateral"},
     {"name": "Eloy Smith", "cedula": "12-704-1497", "age": "25", "position": "Evisceración", "result": "Normal bilateral"},
     {"name": "Shanira Crosdale", "cedula": "8-709-2446", "age": "49", "position": "Supervisora Evisceración", "result": "Normal bilateral"},
     {"name": "Tomas Marin", "cedula": "9-201-776", "age": "53", "position": "Evisceración", "result": "Normal bilateral"},
     {"name": "Carlos Martinez", "cedula": "8-813-1647", "age": "38", "position": "Evisceración", "result": "Normal bilateral"},
-    {"name": "Evangelista Pineda", "cedula": "4-203-194", "age": "57", "position": "Evisceración", "result": "Normal bilateral"},
+    {"name": "Evangelista Pineda", "cedula": "4-203-194", "age": "57", "position": "Evisceración", "result": "Caída leve bilateral"},
     {"name": "Isidra Peralta", "cedula": "9-702-1488", "age": "49", "position": "Evisceración", "result": "Normal bilateral"},
     {"name": "Yesenia Aparicio", "cedula": "4-273-197", "age": "", "position": "Evisceración", "result": "Normal bilateral"},
     {"name": "Argelia Ibarra", "cedula": "2-712-585", "age": "43", "position": "Evisceración", "result": "Normal bilateral"},
@@ -55,29 +55,29 @@ patients_pedregal = [
     {"name": "Katherine Saez", "cedula": "8-763-1989", "age": "43", "position": "Evisceración", "result": "Normal bilateral"},
     {"name": "Ovidio Sanchez", "cedula": "2-701-1801", "age": "49", "position": "Evisceración", "result": "Normal bilateral"},
     {"name": "Yesica Edwards", "cedula": "8-516-2110", "age": "58", "position": "Evisceración", "result": "Normal bilateral"},
-    {"name": "Doris Gracia", "cedula": "8-522-692", "age": "53", "position": "Evisceración", "result": "Normal bilateral"},
+    {"name": "Doris Gracia", "cedula": "8-522-692", "age": "53", "position": "Evisceración", "result": "Caída leve bilateral"},
     {"name": "Nilda Valdez", "cedula": "4-737-2171", "age": "", "position": "Evisceración", "result": "Normal bilateral"},
     {"name": "Benedicto Abrego", "cedula": "1-746-676", "age": "27", "position": "Evisceración", "result": "Normal bilateral"},
     {"name": "Melania Caraballo", "cedula": "9-149-570", "age": "", "position": "Evisceración", "result": "Normal bilateral"},
-    {"name": "Luis Palma", "cedula": "8-372-482", "age": "61", "position": "Desplume", "result": "Normal bilateral"},
+    {"name": "Luis Palma", "cedula": "8-372-482", "age": "61", "position": "Desplume", "result": "Caída leve bilateral"},
     {"name": "Aristides Alveo", "cedula": "2-126-597", "age": "56", "position": "Desplume", "result": "Normal bilateral"},
-    {"name": "Martin Ortega", "cedula": "4-712-1342", "age": "", "position": "Desplume", "result": "Normal bilateral"},
-    {"name": "Marvin Mendoza", "cedula": "4-796-595", "age": "45", "position": "Desplume", "result": "Normal bilateral"},
-    {"name": "Justino Castillo", "cedula": "1-703-2053", "age": "", "position": "Lavado de Canasta", "result": "Normal bilateral"},
+    {"name": "Martin Ortega", "cedula": "4-712-1342", "age": "48", "position": "Desplume", "result": "Caída leve unilateral"},
+    {"name": "Marvin Mendoza", "cedula": "4-796-595", "age": "45", "position": "Desplume", "result": "Caída leve bilateral"},
+    {"name": "Justino Castillo", "cedula": "1-703-2053", "age": "49", "position": "Lavado de Canasta", "result": "Caída leve bilateral"},
     {"name": "Alexis Pitti", "cedula": "8-467-446", "age": "52", "position": "Lavado de Canasta", "result": "Normal bilateral"},
-    {"name": "Francisco Acosta", "cedula": "4-256-768", "age": "54", "position": "Lavado de Canasta", "result": "Normal bilateral"},
+    {"name": "Francisco Acosta", "cedula": "4-256-768", "age": "54", "position": "Lavado de Canasta", "result": "Caída leve unilateral"},
     {"name": "Renato Palacio", "cedula": "1-705-1277", "age": "46", "position": "Lavado de Canasta", "result": "Normal bilateral"},
     {"name": "Josue Rugama", "cedula": "1-740-623", "age": "30", "position": "Lavado de Canasta", "result": "Normal bilateral"},
-    {"name": "Asalon Morales", "cedula": "1-714-1456", "age": "41", "position": "Lavado de Canasta", "result": "Normal bilateral"},
+    {"name": "Asalon Morales", "cedula": "1-714-1456", "age": "41", "position": "Lavado de Canasta", "result": "Caída leve bilateral"},
     {"name": "Abdiel Ramos", "cedula": "8-962-1133", "age": "25", "position": "Lavado de Canasta", "result": "Normal bilateral"},
     {"name": "Alfredo Baker", "cedula": "1-737-1462", "age": "33", "position": "Lavado de Canasta", "result": "Normal bilateral"},
     {"name": "Rafael Anguizola", "cedula": "8-1014-565", "age": "22", "position": "Lavado de Canasta", "result": "Normal bilateral"},
-    {"name": "Rolando Mora", "cedula": "", "age": "", "position": "Operador Deshuesado", "result": "Normal bilateral"},
+    {"name": "Rolando Mora", "cedula": "8-788-2391", "age": "41", "position": "Operador Deshuesado", "result": "Caída leve bilateral"},
     {"name": "Ernesto Gonzalez", "cedula": "8-934-2172", "age": "", "position": "Deshuesado", "result": "Normal bilateral"},
     {"name": "Elmira Guevara", "cedula": "9-732-2314", "age": "", "position": "Deshuesado", "result": "Normal bilateral"},
     {"name": "Eliecer Pinzon", "cedula": "8-874-1041", "age": "", "position": "Deshuesado", "result": "Normal bilateral"},
     {"name": "Ezequiel Rueda", "cedula": "8-863-825", "age": "", "position": "Deshuesado", "result": "Normal bilateral"},
-    {"name": "Domingo Cruz", "cedula": "8-704-1688", "age": "", "position": "Deshuesado", "result": "Normal bilateral"},
+    {"name": "Domingo Cruz", "cedula": "8-704-1688", "age": "49", "position": "Deshuesado", "result": "Caída leve bilateral"},
 ]
 
 print(f"[Pedregal] 60 pacientes preparados.")
@@ -112,8 +112,25 @@ report_audio = {
     "evaluator_main": "",
     "evaluator_audio": "",
     "evaluator_spiro": "",
-    "conclusion_text": "Se evaluaron un total de 60 colaboradores en la Planta Pedregal mediante pruebas de audiometría ocupacional.",
-    "recommendations_text": "1. Uso obligatorio de protección auditiva adecuada en áreas de exposición a ruido continuo o de impacto.\n2. Seguimiento y control audiométrico periódico anual.\n3. Capacitación continua en conservación de la audición.",
+    "conclusion_text": (
+        "La empresa Productos Toledano S.A., realizó la evaluación auditiva (audiometrías laborales) "
+        "a los colaboradores en la Planta Pedregal.\n\n"
+        "Se aplicó la prueba de audiometría laboral a un total de 60 colaboradores convocados, quienes "
+        "suministraron de manera confidencial su historia clínica y laboral. Del total de 60 colaboradores evaluados: "
+        "40 colaboradores (66.7%) presentaron audición dentro de los límites normales (Normal bilateral), "
+        "y 20 colaboradores (33.3%) presentaron hallazgos de alteración auditiva (17 casos con caída leve bilateral "
+        "y 3 casos con caída leve unilateral).\n\n"
+        "Todos los colaboradores fueron orientados sobre las medidas de higiene auditiva y la importancia del uso continuo "
+        "y correcto del equipo de protección auditiva en sus puestos de trabajo.\n\n"
+        "El audiómetro utilizado cuenta con su correspondiente certificado de calibración anual ISO, "
+        "garantizando la exactitud y confiabilidad técnica de los resultados."
+    ),
+    "recommendations_text": (
+        "• Se recomienda la realización periódica (anual) de la evaluación auditiva (audiometría laboral) para el seguimiento y vigilancia epidemiológica.\n"
+        "• Continuar suministrando y supervisando el uso obligatorio y correcto de los equipos de protección auditiva (tapones y/o orejeras) en todas las áreas operativas.\n"
+        "• Brindar seguimiento especializado e interconsulta con Otorrinolaringología / Audiología a los 20 colaboradores con hallazgo de caída auditiva (17 bilaterales y 3 unilaterales).\n"
+        "• Realizar capacitaciones continuas en salud ocupacional enfocadas en la conservación de la audición y prevención del daño auditivo inducido por ruido."
+    ),
     "resultados_audiometria": patients_pedregal,
     "resultados_espirometria": [],
     "adjuntos": [

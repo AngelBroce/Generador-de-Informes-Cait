@@ -513,13 +513,22 @@ async def export_zip(request: Request):
                 shutil.copy2(resolved, cat_dir)
 
     # 4. Crear el ZIP a partir de la carpeta que ya llenamos
-    zip_base_name = str(export_base / report_name)
+    # 4. Crear el ZIP a partir de la carpeta que ya llenamos con compresión máxima (nivel 9)
+    zip_dest_file = export_base / f"{report_name}.zip"
+    def make_compressed_zip(target_zip, source_dir):
+        import zipfile
+        with zipfile.ZipFile(target_zip, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zipf:
+            for root, _, files in os.walk(source_dir):
+                for file in files:
+                    full_p = os.path.join(root, file)
+                    rel_p = os.path.relpath(full_p, source_dir)
+                    zipf.write(full_p, rel_p)
+        return str(target_zip)
+
     zip_path = await run_in_threadpool(
-        shutil.make_archive,
-        zip_base_name,
-        'zip',
-        root_dir=str(export_base),
-        base_dir=report_name
+        make_compressed_zip,
+        zip_dest_file,
+        dest_dir
     )
     
     filename = f"{report_name}.zip"
@@ -651,7 +660,11 @@ async def save_report(request: Request):
                 data[list_k] = ref_data[list_k]
                 
         # Proteger campos generales si vienen vacíos desde un formulario no inicializado
-        for str_k in ["company_name", "company_activity", "company_address", "location", "plant", "evaluation_date", "study_date"]:
+        for str_k in [
+            "company_name", "company_activity", "company_address", "location", "plant",
+            "evaluation_date", "study_date", "evaluator_main", "evaluator_audio",
+            "evaluator_spiro", "counterpart_name", "counterpart_role"
+        ]:
             if not data.get(str_k) and ref_data.get(str_k):
                 data[str_k] = ref_data[str_k]
                 
@@ -875,6 +888,8 @@ async def export_cait():
         data,
         data_root=data_root,
         persons_repo=persons_repo,
+        evaluators_repo=evaluators_repo,
+        counterparts_repo=counterparts_repo,
         include_files=True,
         include_drafts=True
     )
@@ -900,6 +915,8 @@ async def export_caitpkg():
         data,
         data_root=data_root,
         persons_repo=persons_repo,
+        evaluators_repo=evaluators_repo,
+        counterparts_repo=counterparts_repo,
         include_drafts=True
     )
     return FileResponse(path=zip_path, filename=filename, media_type="application/zip")
@@ -981,6 +998,8 @@ async def save_export_to_disk(request: Request):
     if export_type in ("cait", "informe.cait"):
         pkg = data_exchange_service.export_report_cait(
             data, data_root=data_root, persons_repo=persons_repo,
+            evaluators_repo=evaluators_repo,
+            counterparts_repo=counterparts_repo,
             include_files=True, include_drafts=True
         )
         filename = f"CAIT_{safe_company}_{datetime.now().strftime('%Y%m%d')}.cait"
@@ -991,7 +1010,10 @@ async def save_export_to_disk(request: Request):
         
     elif export_type in ("caitpkg", "caso_completo.caitpkg"):
         zip_path, filename = data_exchange_service.export_report_package_zip(
-            data, data_root=data_root, persons_repo=persons_repo, include_drafts=True
+            data, data_root=data_root, persons_repo=persons_repo,
+            evaluators_repo=evaluators_repo,
+            counterparts_repo=counterparts_repo,
+            include_drafts=True
         )
         target_path = dl_dir / filename
         shutil.copy2(zip_path, target_path)

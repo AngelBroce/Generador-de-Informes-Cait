@@ -75,11 +75,18 @@ def test_full_data_exchange_pipeline():
         }
 
         # 1. Test Export CAIT
-        cait_pkg = service.export_report_cait(sample_report, persons_repo=persons_repo)
+        cait_pkg = service.export_report_cait(
+            sample_report,
+            persons_repo=persons_repo,
+            evaluators_repo=evaluators_repo,
+            counterparts_repo=counterparts_repo
+        )
         assert cait_pkg["_header"]["format"] == DataExchangeService.FORMAT_IDENTIFIER
         assert cait_pkg["summary"]["company"] == "Empresa Test S.A."
         assert cait_pkg["summary"]["total_audiometria"] == 2
-        print("[OK] Test Export CAIT passed")
+        assert "associated_evaluators" in cait_pkg, "associated_evaluators ausente en .cait"
+        assert len(cait_pkg["associated_evaluators"]) > 0, "No se exportaron evaluadores en .cait"
+        print("[OK] Test Export CAIT passed (con evaluadores incluidos)")
         print("[OK] Test Export Excel passed")
         print("[OK] Test Export CSV passed")
         print("[OK] Test Import CAIT and Auto-Registration passed")

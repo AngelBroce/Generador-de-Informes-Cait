@@ -52,13 +52,17 @@ class ZipExporter:
                     if f_path and os.path.exists(f_path):
                         shutil.copy2(f_path, cat_dir)
             
-            # 3. Crear ZIP
+            # 3. Crear ZIP con máxima compresión (DEFLATED nivel 9 para asegurar el menor tamaño posible)
             zip_path = os.path.join(output_dir, f"{report_name}.zip")
             if os.path.exists(zip_path):
                 os.remove(zip_path)
                 
-            shutil.make_archive(os.path.join(output_dir, report_name), 'zip', 
-                               root_dir=output_dir, base_dir=report_name)
+            with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zipf:
+                for root, _, files in os.walk(temp_root):
+                    for file in files:
+                        full_p = os.path.join(root, file)
+                        rel_p = os.path.relpath(full_p, temp_root)
+                        zipf.write(full_p, rel_p)
             
             # Limpiar carpeta temporal
             shutil.rmtree(temp_root)

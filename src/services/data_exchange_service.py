@@ -36,7 +36,12 @@ class DataExchangeService:
     # EXPORTACIÓN
     # =========================================================================
 
-    def _collect_all_report_files(self, report_data: dict, data_root: Path) -> List[Dict[str, Any]]:
+    def _collect_all_report_files(
+        self,
+        report_data: dict,
+        data_root: Path,
+        extra_evaluators: Optional[List[Dict[str, Any]]] = None
+    ) -> List[Dict[str, Any]]:
         """
         Recolecta todos los archivos físicos (PDFs, imágenes, certificados, idoneidades)
         asociados a un reporte para empaquetarlos en .caitpkg o embeberlos en .cait.
@@ -144,6 +149,21 @@ class DataExchangeService:
                 if f.is_file():
                     add_file(f, category="idoneidad", tipo="Idoneidad Profesional")
 
+        # 6. Idoneidades específicas referenciadas por los evaluadores
+        if extra_evaluators:
+            for ev in extra_evaluators:
+                cred = ev.get("credential_file") if isinstance(ev, dict) else None
+                if cred and isinstance(cred, str) and cred.strip():
+                    for cand in [
+                        data_root / cred,
+                        data_root / cred.replace("data/", "").replace("data\\", ""),
+                        data_root / "attachments" / "idoneidad" / os.path.basename(cred),
+                        Path(cred)
+                    ]:
+                        if cand.exists() and cand.is_file():
+                            add_file(cand, category="idoneidad", tipo="Idoneidad Profesional")
+                            break
+
         return collected
 
     def _collect_all_drafts(self, data_root: Path) -> List[Dict[str, Any]]:
@@ -168,19 +188,22 @@ class DataExchangeService:
         report_data: dict,
         data_root: Optional[Path] = None,
         persons_repo=None,
+        evaluators_repo=None,
+        counterparts_repo=None,
         include_files: bool = True,
         include_drafts: bool = True
     ) -> dict:
         """
         Genera una estructura serializable completa (.cait) del informe actual,
-        incluyendo pacientes asociados, borradores y archivos/PDFs embebidos en base64
-        para facilitar el auto-registro y portabilidad completa en otra PC.
+        incluyendo pacientes asociados, catálogo de evaluadores, contrapartes,
+        borradores y archivos/PDFs embebidos en base64 para facilitar el auto-registro
+        y portabilidad total en otra PC sin perder datos de evaluadores.
         """
         data = dict(report_data)
         company = str(data.get("company_name") or data.get("company") or "Empresa").strip()
         eval_date = str(data.get("evaluation_date") or data.get("study_date") or datetime.now().strftime("%Y-%m-%d"))
         
-        # Recolectar pacientes asociados para incluirlos en el paquete
+        # 1. Recolectar pacientes asociados
         associated_persons = []
         if persons_repo:
             cedulas = set()
@@ -196,15 +219,57 @@ class DataExchangeService:
                 if p:
                     associated_persons.append(p)
 
-        # Archivos y PDFs embebidos
+        # 2. Recolectar catálogo de evaluadores y perfiles asociados al reporte
+        associated_evaluators: List[Dict[str, Any]] = []
+        if evaluators_repo:
+            try:
+                catalog = evaluators_repo.list_all()
+                for ev in catalog:
+                    if isinstance(ev, dict) and ev.get("id"):
+                        associated_evaluators.append(ev)
+            except Exception as e:
+                print(f"Error recolectando catálogo de evaluadores: {e}")
+
+        # Asegurar que cualquier evaluador referenciado en el reporte esté incluido
+        eval_keys = ["evaluator_main", "evaluator_audio", "evaluator_spiro", "evaluador", "evaluator_name"]
+        for ek in eval_keys:
+            ev_ref = data.get(ek)
+            if ev_ref and isinstance(ev_ref, str) and ev_ref.strip():
+                ref_str = ev_ref.strip()
+                if not any(e.get("id") == ref_str or e.get("name", "").strip().lower() == ref_str.lower() for e in associated_evaluators):
+                    if evaluators_repo and hasattr(evaluators_repo, "get_by_id_or_name"):
+                        found_ev = evaluators_repo.get_by_id_or_name(ref_str)
+                        if found_ev:
+                            associated_evaluators.append(found_ev)
+
+        # Enriquecer data con evaluator_profile para máxima compatibilidad con lectores antiguos
+        main_ref = data.get("evaluator_main") or data.get("evaluador")
+        if main_ref and associated_evaluators:
+            main_profile = next(
+                (e for e in associated_evaluators if e.get("id") == main_ref or e.get("name") == main_ref),
+                None
+            )
+            if main_profile:
+                data["evaluator_profile"] = main_profile
+        data["evaluators"] = associated_evaluators
+
+        # 3. Recolectar contrapartes técnicas
+        associated_counterparts: List[Dict[str, Any]] = []
+        if counterparts_repo:
+            try:
+                associated_counterparts = counterparts_repo.list_all()
+            except Exception as e:
+                print(f"Error recolectando contrapartes: {e}")
+
+        # 4. Archivos y PDFs embebidos
         embedded_files = []
         if include_files and data_root and data_root.exists():
-            files_to_embed = self._collect_all_report_files(data, data_root)
+            files_to_embed = self._collect_all_report_files(data, data_root, extra_evaluators=associated_evaluators)
             for finfo in files_to_embed:
                 fpath = finfo["path"]
                 try:
                     raw_bytes = fpath.read_bytes()
-                    if len(raw_bytes) <= 20 * 1024 * 1024:
+                    if len(raw_bytes) <= 25 * 1024 * 1024:
                         embedded_files.append({
                             "name": finfo["name"],
                             "category": finfo["category"],
@@ -216,7 +281,7 @@ class DataExchangeService:
                 except Exception as e:
                     print(f"Error embebiendo archivo {fpath}: {e}")
 
-        # Borradores guardados en el sistema
+        # 5. Borradores guardados en el sistema
         saved_drafts = []
         if include_drafts and data_root and data_root.exists():
             saved_drafts = self._collect_all_drafts(data_root)
@@ -230,6 +295,10 @@ class DataExchangeService:
             },
             "report": data,
             "associated_persons": associated_persons,
+            "associated_evaluators": associated_evaluators,
+            "evaluators": associated_evaluators,
+            "associated_counterparts": associated_counterparts,
+            "counterparts": associated_counterparts,
             "embedded_files": embedded_files,
             "saved_drafts": saved_drafts,
             "summary": {
@@ -238,6 +307,7 @@ class DataExchangeService:
                 "report_type": data.get("report_type", "audiometria"),
                 "total_audiometria": len(data.get("resultados_audiometria", [])),
                 "total_espirometria": len(data.get("resultados_espirometria", [])),
+                "total_evaluators": len(associated_evaluators),
                 "total_files": len(embedded_files),
                 "total_drafts": len(saved_drafts),
             }
@@ -249,17 +319,21 @@ class DataExchangeService:
         report_data: dict,
         data_root: Path,
         persons_repo=None,
+        evaluators_repo=None,
+        counterparts_repo=None,
         include_drafts: bool = True
     ) -> Tuple[Path, str]:
         """
         Crea un paquete .caitpkg (ZIP portable) que incluye el JSON de datos,
-        todos los archivos adjuntos y PDFs (certificados, idoneidades, etc.)
-        y todos los borradores guardados para migrar todo sin perder nada.
+        el catálogo de evaluadores y contrapartes, todos los archivos adjuntos y PDFs
+        (certificados, idoneidades, etc.) y todos los borradores guardados para migrar todo sin perder nada.
         """
         cait_data = self.export_report_cait(
             report_data,
             data_root=data_root,
             persons_repo=persons_repo,
+            evaluators_repo=evaluators_repo,
+            counterparts_repo=counterparts_repo,
             include_files=False,  # En ZIP van como archivos binarios reales
             include_drafts=include_drafts
         )
@@ -277,7 +351,11 @@ class DataExchangeService:
             zf.writestr("manifest.json", json.dumps(cait_data, ensure_ascii=False, indent=2))
             
             # Recolectar y guardar todos los adjuntos físicos (PDFs, imágenes, etc.)
-            files_to_pack = self._collect_all_report_files(report_data, data_root)
+            files_to_pack = self._collect_all_report_files(
+                report_data,
+                data_root,
+                extra_evaluators=cait_data.get("associated_evaluators")
+            )
             for finfo in files_to_pack:
                 src = finfo["path"]
                 if src.exists():
@@ -640,6 +718,8 @@ class DataExchangeService:
         """
         report_dict = {}
         associated_persons = []
+        associated_evaluators = []
+        associated_counterparts = []
         is_zip = False
         attachments_restored = 0
         drafts_restored = 0
@@ -671,6 +751,8 @@ class DataExchangeService:
                     if "report" in pkg_data:
                         report_dict = pkg_data["report"]
                         associated_persons = pkg_data.get("associated_persons", [])
+                        associated_evaluators = pkg_data.get("associated_evaluators") or pkg_data.get("evaluators") or []
+                        associated_counterparts = pkg_data.get("associated_counterparts") or pkg_data.get("counterparts") or []
                     else:
                         report_dict = pkg_data
                         
@@ -709,6 +791,8 @@ class DataExchangeService:
                     if "report" in pkg_data:
                         report_dict = pkg_data["report"]
                         associated_persons = pkg_data.get("associated_persons", [])
+                        associated_evaluators = pkg_data.get("associated_evaluators") or pkg_data.get("evaluators") or []
+                        associated_counterparts = pkg_data.get("associated_counterparts") or pkg_data.get("counterparts") or []
                     else:
                         report_dict = pkg_data
                         
@@ -798,26 +882,157 @@ class DataExchangeService:
                 except Exception:
                     pass
 
-        # 4. Auto-registro de evaluadores y contrapartes
+        # 4. Auto-registro y portabilidad de evaluadores y contrapartes
         new_evaluators_count = 0
         new_counterparts_count = 0
         try:
-            # Contraparte
-            cp_name = norm_report.get("counterpart_name")
-            cp_role = norm_report.get("counterpart_role")
-            if cp_name:
-                existing_cps = counterparts_repo.list_all()
-                if not any(c.get("name", "").strip().lower() == cp_name.strip().lower() for c in existing_cps):
-                    counterparts_repo.add_counterpart({"name": cp_name, "role": cp_role or "Contraparte Técnica"})
-                    new_counterparts_count += 1
+            # A) Auto-registro de evaluadores provenientes de associated_evaluators en el paquete .cait / .caitpkg
+            if evaluators_repo:
+                for ev in associated_evaluators:
+                    if isinstance(ev, dict) and (ev.get("name") or ev.get("id")):
+                        try:
+                            if hasattr(evaluators_repo, "upsert_evaluator"):
+                                evaluators_repo.upsert_evaluator(ev)
+                            else:
+                                existing = evaluators_repo.list_all()
+                                if not any(e.get("id") == ev.get("id") for e in existing):
+                                    evaluators_repo.add_evaluator(ev)
+                            new_evaluators_count += 1
+                        except Exception as e:
+                            print(f"Error auto-registrando evaluador del paquete {ev.get('id')}: {e}")
 
-            # Perfil de evaluador si venía embebido
-            ev_prof = norm_report.get("evaluator_profile")
-            if isinstance(ev_prof, dict) and ev_prof.get("name"):
-                existing_evs = evaluators_repo.list_all()
-                if not any(e.get("name", "").strip().lower() == ev_prof["name"].strip().lower() for e in existing_evs):
-                    evaluators_repo.add_evaluator(ev_prof)
-                    new_evaluators_count += 1
+                # B) Perfil de evaluador si venía en el objeto de reporte
+                ev_prof = norm_report.get("evaluator_profile")
+                if isinstance(ev_prof, dict) and (ev_prof.get("name") or ev_prof.get("id")):
+                    try:
+                        if hasattr(evaluators_repo, "upsert_evaluator"):
+                            evaluators_repo.upsert_evaluator(ev_prof)
+                        else:
+                            existing = evaluators_repo.list_all()
+                            if not any(e.get("id") == ev_prof.get("id") for e in existing):
+                                evaluators_repo.add_evaluator(ev_prof)
+                        new_evaluators_count += 1
+                    except Exception as e:
+                        print(f"Error auto-registrando evaluator_profile: {e}")
+
+                # C) Lista de evaluadores si venía dentro de report (report.evaluators)
+                for ev in norm_report.get("evaluators", []):
+                    if isinstance(ev, dict) and (ev.get("name") or ev.get("id")):
+                        try:
+                            if hasattr(evaluators_repo, "upsert_evaluator"):
+                                evaluators_repo.upsert_evaluator(ev)
+                            new_evaluators_count += 1
+                        except Exception:
+                            pass
+
+                # D) Resiliencia para .cait heredados o de otros dispositivos:
+                # Si el archivo .cait traía evaluadores en evaluator_main, evaluator_audio o evaluator_spiro
+                # pero el catálogo de esta máquina no los tiene registrados, los creamos automáticamente.
+                eval_fields = [
+                    ("evaluator_main", "audiometria_espirometria"),
+                    ("evaluator_audio", "audiometria"),
+                    ("evaluator_spiro", "espirometria"),
+                    ("evaluator_name", "audiometria_espirometria"),
+                    ("evaluador", "audiometria_espirometria")
+                ]
+                for field_key, default_app_report in eval_fields:
+                    raw_val = norm_report.get(field_key)
+                    if not raw_val or not isinstance(raw_val, str):
+                        continue
+                    clean_val = raw_val.strip()
+                    if not clean_val or clean_val.lower() in ("", "ninguno", "none", "null"):
+                        continue
+
+                    # Verificar si existe en el repositorio
+                    existing_entry = None
+                    if hasattr(evaluators_repo, "get_by_id_or_name"):
+                        existing_entry = evaluators_repo.get_by_id_or_name(clean_val)
+                    elif hasattr(evaluators_repo, "get_by_id"):
+                        existing_entry = evaluators_repo.get_by_id(clean_val)
+
+                    if not existing_entry:
+                        # Auto-reconstruir perfil legible para el evaluador
+                        slug_parts = clean_val.replace("_", "-").split("-")
+                        first_slug = slug_parts[0].lower()
+                        title_label = "Licda."
+                        header_label = "Licenciada"
+                        formatted_name = clean_val
+
+                        if first_slug in ("licdo", "lic"):
+                            title_label = "Licdo."
+                            header_label = "Licenciado"
+                            formatted_name = "Licdo. " + " ".join([p.capitalize() for p in slug_parts[1:]])
+                        elif first_slug in ("licda",):
+                            title_label = "Licda."
+                            header_label = "Licenciada"
+                            formatted_name = "Licda. " + " ".join([p.capitalize() for p in slug_parts[1:]])
+                        elif first_slug in ("dr", "doctor"):
+                            title_label = "Dr."
+                            header_label = "Doctor"
+                            formatted_name = "Dr. " + " ".join([p.capitalize() for p in slug_parts[1:]])
+                        elif first_slug in ("dra", "doctora"):
+                            title_label = "Dra."
+                            header_label = "Doctora"
+                            formatted_name = "Dra. " + " ".join([p.capitalize() for p in slug_parts[1:]])
+                        elif "-" in clean_val or "_" in clean_val:
+                            formatted_name = " ".join([p.capitalize() for p in slug_parts])
+
+                        # Buscar si existe un certificado de idoneidad en attachments/idoneidad
+                        idoneidad_path = ""
+                        idoneidad_dir = data_root / "attachments" / "idoneidad"
+                        if idoneidad_dir.exists():
+                            for f in idoneidad_dir.glob("*"):
+                                if f.is_file():
+                                    f_low = f.name.lower()
+                                    if any(part.lower() in f_low for part in slug_parts if len(part) > 3):
+                                        idoneidad_path = f"data/attachments/idoneidad/{f.name}"
+                                        break
+
+                        rpt_type = norm_report.get("report_type") or default_app_report
+                        app_rpts = ["audiometria", "espirometria"] if rpt_type == "audiometria_espirometria" else [rpt_type]
+                        profession = "Fonoaudióloga" if "audiometr" in rpt_type else "Terapeuta Respiratorio"
+
+                        new_ev_payload = {
+                            "id": clean_val,
+                            "name": formatted_name,
+                            "title_label": title_label,
+                            "header_label": header_label,
+                            "profession": profession,
+                            "registry": "Registro Profesional",
+                            "credential_file": idoneidad_path,
+                            "applicable_reports": app_rpts,
+                            "technical_details": [f"{profession},", "Registro Profesional."]
+                        }
+                        try:
+                            if hasattr(evaluators_repo, "upsert_evaluator"):
+                                evaluators_repo.upsert_evaluator(new_ev_payload)
+                            else:
+                                evaluators_repo.add_evaluator(new_ev_payload)
+                            new_evaluators_count += 1
+                        except Exception as e:
+                            print(f"Error auto-registrando evaluador {clean_val}: {e}")
+
+            # E) Auto-registro de contrapartes
+            if counterparts_repo:
+                # 1. Desde associated_counterparts si venían en el paquete
+                for cp in associated_counterparts:
+                    if isinstance(cp, dict) and cp.get("name"):
+                        try:
+                            existing_cps = counterparts_repo.list_all()
+                            if not any(c.get("name", "").strip().lower() == cp["name"].strip().lower() for c in existing_cps):
+                                counterparts_repo.add_counterpart(cp)
+                                new_counterparts_count += 1
+                        except Exception:
+                            pass
+
+                # 2. Desde el informe norm_report
+                cp_name = norm_report.get("counterpart_name")
+                cp_role = norm_report.get("counterpart_role")
+                if cp_name:
+                    existing_cps = counterparts_repo.list_all()
+                    if not any(c.get("name", "").strip().lower() == cp_name.strip().lower() for c in existing_cps):
+                        counterparts_repo.add_counterpart({"name": cp_name, "role": cp_role or "Contraparte Técnica"})
+                        new_counterparts_count += 1
         except Exception as e:
             print(f"Error registrando evaluadores/contrapartes importados: {e}")
 

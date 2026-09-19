@@ -68,12 +68,14 @@ def run_test():
     cait_json = res_cait.json()
     assert "embedded_files" in cait_json, "embedded_files no encontrado en paquete .cait"
     assert len(cait_json["embedded_files"]) > 0, "No se embebió ningún archivo en .cait"
+    assert "associated_evaluators" in cait_json, "associated_evaluators no encontrado en .cait"
+    assert len(cait_json["associated_evaluators"]) > 0, "No se exportaron evaluadores en .cait"
     embedded_names = [f["name"] for f in cait_json["embedded_files"]]
     assert test_pdf_name in embedded_names, f"{test_pdf_name} no está en embedded_files"
     assert "saved_drafts" in cait_json, "saved_drafts no encontrado en paquete .cait"
     draft_names = [d["name"] for d in cait_json["saved_drafts"]]
     assert sample_draft_name in draft_names, f"{sample_draft_name} no está en saved_drafts"
-    print(f"4. Exportación .cait exitosa con {len(cait_json['embedded_files'])} archivos y {len(cait_json['saved_drafts'])} borradores embebidos.")
+    print(f"4. Exportación .cait exitosa con {len(cait_json['embedded_files'])} archivos, {len(cait_json['associated_evaluators'])} evaluadores y {len(cait_json['saved_drafts'])} borradores embebidos.")
 
     # 5. Probar exportación de .caitpkg (ZIP con PDFs físicos y borradores en carpeta drafts/)
     res_pkg = client.get("/api/export/caitpkg")
@@ -129,23 +131,32 @@ def run_test():
         finally:
             shutil.rmtree(temp_pkg_dir, ignore_errors=True)
 
-        # C) Importar archivo .cait (JSON) en otro directorio temporal aislado
+        # C) Importar archivo .cait (JSON) en otro directorio temporal aislado con repositorio nuevo
         temp_cait_dir = Path(tempfile.mkdtemp(prefix="cait_json_import_test_"))
         try:
+            from src.services.evaluators_repository import EvaluatorRepository
+            isolated_eval_db = temp_cait_dir / "databases" / "evaluators.json"
+            isolated_eval_db.parent.mkdir(parents=True, exist_ok=True)
+            isolated_eval_db.write_text("[]", encoding="utf-8") # Vacío sin evaluadores
+            isolated_eval_repo = EvaluatorRepository(db_path=isolated_eval_db)
+
             cait_bytes = json.dumps(cait_json).encode("utf-8")
             import_cait_res = exchange_service.import_report_package(
                 file_bytes=cait_bytes,
                 filename="test.cait",
                 data_root=temp_cait_dir,
                 persons_repo=persons_repo,
-                evaluators_repo=evaluators_repo,
+                evaluators_repo=isolated_eval_repo,
                 counterparts_repo=counterparts_repo,
                 normalize_func=normalize_report
             )
             assert import_cait_res["status"] == "ok", f"Error importando .cait: {import_cait_res}"
             assert (temp_cait_dir / "attachments" / "report_adjuntos" / test_pdf_name).exists(), "El PDF no se recreó desde el base64 de .cait"
             assert (temp_cait_dir / "reports" / sample_draft_name).exists(), "El borrador no se recreó desde .cait"
-            print(f"7C. Importación de archivo .cait (JSON) exitosa con reconstrucción de PDFs y borradores.")
+            # Verificar que los evaluadores fueron registrados en el repositorio aislado
+            restored_evals = isolated_eval_repo.list_all()
+            assert len(restored_evals) > 0, "Los evaluadores no se registraron en el repositorio del nuevo dispositivo"
+            print(f"7C. Importación de archivo .cait (JSON) exitosa con {len(restored_evals)} evaluadores auto-registrados.")
         finally:
             shutil.rmtree(temp_cait_dir, ignore_errors=True)
 

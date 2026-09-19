@@ -397,13 +397,45 @@
       evaluators.forEach(ev => {
         if (evalMain) evalMain.add(new Option(ev.name, ev.id));
         const rpts = ev.applicable_reports || [];
-        if (evalAudio && rpts.includes('audiometria')) {
+        if (evalAudio && (rpts.includes('audiometria') || !rpts.length || ev.id === report.evaluator_audio)) {
           evalAudio.add(new Option(ev.name, ev.id));
         }
-        if (evalSpiro && rpts.includes('espirometria')) {
+        if (evalSpiro && (rpts.includes('espirometria') || !rpts.length || ev.id === report.evaluator_spiro)) {
           evalSpiro.add(new Option(ev.name, ev.id));
         }
       });
+
+      // Helper para seleccionar evaluador por ID, nombre o fallback resiliente
+      const setEvaluatorSelect = (sel, val) => {
+        if (!sel || !val) return;
+        const v = String(val).trim();
+        if (!v) return;
+        
+        // 1. Coincidencia directa por value (ID)
+        sel.value = v;
+        if (sel.value === v) return;
+
+        // 2. Coincidencia por texto visible o slug limpio
+        const vClean = v.toLowerCase().replace(/[^a-z0-9]/g, '');
+        for (let i = 0; i < sel.options.length; i++) {
+          const opt = sel.options[i];
+          const optTextClean = opt.text.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const optValClean = opt.value.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (optValClean === vClean || optTextClean === vClean || opt.text.toLowerCase() === v.toLowerCase()) {
+            sel.selectedIndex = i;
+            return;
+          }
+        }
+
+        // 3. Fallback: agregar la opción dinámicamente si no venía en la lista
+        let displayLabel = v;
+        if (v.includes('-') || v.includes('_')) {
+          displayLabel = v.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        }
+        const fallbackOption = new Option(displayLabel, v);
+        sel.add(fallbackOption);
+        sel.value = v;
+      };
 
       // Población de Contrapartes
       counterparts.forEach(c => {
@@ -416,9 +448,9 @@
       if (report.evaluation_date && pickers.evalDate) pickers.evalDate.setDate(report.evaluation_date);
       if (report.evaluation_dates && pickers.evalDates) pickers.evalDates.setDate(report.evaluation_dates);
       
-      if (report.evaluator_main)   document.getElementById('evaluator-main').value   = report.evaluator_main;
-      if (report.evaluator_audio)  document.getElementById('evaluator-audio').value  = report.evaluator_audio;
-      if (report.evaluator_spiro)  document.getElementById('evaluator-spiro').value  = report.evaluator_spiro;
+      setEvaluatorSelect(document.getElementById('evaluator-main'), report.evaluator_main);
+      setEvaluatorSelect(document.getElementById('evaluator-audio'), report.evaluator_audio);
+      setEvaluatorSelect(document.getElementById('evaluator-spiro'), report.evaluator_spiro);
       if (report.company_name)     document.getElementById('company-name').value     = report.company_name;
       
       if (report.study_date_mode)  setStudyDateMode(report.study_date_mode, false);
